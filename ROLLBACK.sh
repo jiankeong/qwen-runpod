@@ -6,6 +6,7 @@ for path in handler.py Dockerfile requirements.txt .dockerignore .env.example de
   rm -f "$root/$path"
 done
 rm -rf "$root/tests" "$root/__pycache__"
+rm -rf "$root/.runpod"
 if [[ "$root" != "$(pwd)" ]]; then
   rm -f "$root/ROLLBACK.sh"
 fi

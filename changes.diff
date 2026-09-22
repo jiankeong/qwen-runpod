@@ -1,112 +1,198 @@
-diff --git a/handler.py b/handler.py
+diff --git a/README.md b/README.md
+index 62a21f2..d96fba7 100644
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,13 @@ This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
+ `UD-Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs. The
+ handler preserves the OpenAI chat/completions response shape.
+ 
++## RunPod Hub
++
++The repository includes `.runpod/hub.json` and `.runpod/tests.json`, so a GitHub
++release can be indexed and tested by RunPod Hub. The Hub listing uses the
++**Language** category, one GPU with at least 24 GB VRAM, a 30 GB container disk,
++and a non-streaming chat-completion smoke test.
++
+ ## 1. Build and push
+ 
+ ```bash
+diff --git a/ROLLBACK.sh b/ROLLBACK.sh
+index 3c2218a..744f06e 100755
+--- a/ROLLBACK.sh
++++ b/ROLLBACK.sh
+@@ -6,6 +6,7 @@ for path in handler.py Dockerfile requirements.txt .dockerignore .env.example de
+   rm -f "$root/$path"
+ done
+ rm -rf "$root/tests" "$root/__pycache__"
++rm -rf "$root/.runpod"
+ if [[ "$root" != "$(pwd)" ]]; then
+   rm -f "$root/ROLLBACK.sh"
+ fi
+diff --git a/.runpod/hub.json b/.runpod/hub.json
 new file mode 100644
-index 0000000..2a00be9
+index 0000000..43640d5
 --- /dev/null
-+++ b/handler.py
-@@ -0,0 +1,106 @@
-+"""RunPod Serverless adapter for an OpenAI-compatible llama.cpp server."""
-+
-+from __future__ import annotations
-+
-+import json
-+import os
-+import subprocess
-+import time
-+import urllib.error
-+import urllib.request
-+from typing import Any
-+
-+
-+LLAMA_HOST = os.getenv("LLAMA_HOST", "127.0.0.1")
-+LLAMA_PORT = int(os.getenv("LLAMA_PORT", "8080"))
-+LLAMA_BASE_URL = f"http://{LLAMA_HOST}:{LLAMA_PORT}"
-+ALLOWED_ROUTES = {"/v1/chat/completions", "/v1/completions"}
-+
-+
-+def build_server_command() -> list[str]:
-+    """Build the llama-server command entirely from environment settings."""
-+    model = os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M")
-+    command = [
-+        os.getenv("LLAMA_SERVER_BIN", "/app/llama-server"),
-+        "--host", LLAMA_HOST,
-+        "--port", str(LLAMA_PORT),
-+        "--hf-repo", model.split(":", 1)[0],
-+        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
-+        "--n-gpu-layers", os.getenv("GPU_LAYERS", "999"),
-+        "--ctx-size", os.getenv("CONTEXT_SIZE", "16384"),
-+        "--parallel", os.getenv("PARALLEL", "1"),
-+        "--cache-type-k", os.getenv("CACHE_TYPE_K", "q8_0"),
-+        "--cache-type-v", os.getenv("CACHE_TYPE_V", "q8_0"),
-+        "--flash-attn", "on",
-+        "--jinja",
++++ b/.runpod/hub.json
+@@ -0,0 +1,85 @@
++{
++  "title": "Qwen3.8-27B GGUF",
++  "description": "Run Qwen3.8-27B UD-Q4_K_M with CUDA llama.cpp through OpenAI-compatible chat and completion requests.",
++  "type": "serverless",
++  "category": "language",
++  "config": {
++    "runsOn": "GPU",
++    "containerDiskInGb": 30,
++    "gpuCount": 1,
++    "gpuIds": "AMPERE_24,ADA_24,AMPERE_48,ADA_48_PRO,AMPERE_80,ADA_80_PRO,HOPPER_141",
++    "presets": [
++      {
++        "name": "24 GB VRAM / 16K context",
++        "defaults": {
++          "CONTEXT_SIZE": 16384,
++          "PARALLEL": 1,
++          "CACHE_TYPE_K": "q8_0",
++          "CACHE_TYPE_V": "q8_0"
++        }
++      },
++      {
++        "name": "48 GB+ VRAM / 32K context",
++        "defaults": {
++          "CONTEXT_SIZE": 32768,
++          "PARALLEL": 1,
++          "CACHE_TYPE_K": "q8_0",
++          "CACHE_TYPE_V": "q8_0"
++        }
++      }
++    ],
++    "env": [
++      {
++        "key": "MODEL",
++        "value": "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"
++      },
++      {
++        "key": "MODEL_FILE",
++        "value": "Qwen3.8-27B-UD-Q4_K_M.gguf"
++      },
++      {
++        "key": "GPU_LAYERS",
++        "value": "999"
++      },
++      {
++        "key": "CONTEXT_SIZE",
++        "input": {
++          "name": "Context size",
++          "type": "number",
++          "description": "Maximum context tokens. Use 16384 on 24 GB GPUs.",
++          "min": 4096,
++          "max": 131072,
++          "default": 16384
++        }
++      },
++      {
++        "key": "PARALLEL",
++        "input": {
++          "name": "Parallel slots",
++          "type": "number",
++          "description": "Concurrent llama.cpp decode slots; each slot divides the configured context.",
++          "min": 1,
++          "max": 4,
++          "default": 1,
++          "advanced": true
++        }
++      },
++      {
++        "key": "CACHE_TYPE_K",
++        "value": "q8_0"
++      },
++      {
++        "key": "CACHE_TYPE_V",
++        "value": "q8_0"
++      },
++      {
++        "key": "STARTUP_TIMEOUT",
++        "value": "1800"
++      },
++      {
++        "key": "REQUEST_TIMEOUT",
++        "value": "900"
++      }
 +    ]
-+    if os.getenv("HF_TOKEN"):
-+        command.extend(["--hf-token", os.environ["HF_TOKEN"]])
-+    return command
++  }
++}
+diff --git a/.runpod/tests.json b/.runpod/tests.json
+new file mode 100644
+index 0000000..0f6d902
+--- /dev/null
++++ b/.runpod/tests.json
+@@ -0,0 +1,37 @@
++{
++  "tests": [
++    {
++      "name": "chat_completion_smoke_test",
++      "input": {
++        "messages": [
++          {
++            "role": "user",
++            "content": "Reply with exactly: RUNPOD_OK"
++          }
++        ],
++        "temperature": 0,
++        "max_tokens": 32,
++        "stream": false
++      },
++      "timeout": 1800000
++    }
++  ],
++  "config": {
++    "gpuTypeId": "NVIDIA GeForce RTX 4090",
++    "gpuCount": 1,
++    "env": [
++      {
++        "key": "CONTEXT_SIZE",
++        "value": "16384"
++      },
++      {
++        "key": "PARALLEL",
++        "value": "1"
++      },
++      {
++        "key": "STARTUP_TIMEOUT",
++        "value": "1800"
++      }
++    ]
++  }
++}
+diff --git a/tests/test_runpod_hub.py b/tests/test_runpod_hub.py
+new file mode 100644
+index 0000000..65a531d
+--- /dev/null
++++ b/tests/test_runpod_hub.py
+@@ -0,0 +1,28 @@
++import json
++import unittest
++from pathlib import Path
 +
 +
-+def wait_until_ready(timeout: int = 1800) -> None:
-+    """Wait through model download/loading until llama.cpp reports healthy."""
-+    deadline = time.monotonic() + timeout
-+    last_error: Exception | None = None
-+    while time.monotonic() < deadline:
-+        try:
-+            with urllib.request.urlopen(f"{LLAMA_BASE_URL}/health", timeout=5) as response:
-+                if response.status == 200:
-+                    return
-+        except (OSError, urllib.error.URLError) as exc:
-+            last_error = exc
-+        time.sleep(2)
-+    raise TimeoutError(f"llama-server did not become ready: {last_error}")
++ROOT = Path(__file__).resolve().parents[1]
 +
 +
-+def forward(route: str, payload: dict[str, Any]) -> dict[str, Any]:
-+    body = json.dumps(payload).encode("utf-8")
-+    request = urllib.request.Request(
-+        f"{LLAMA_BASE_URL}{route}",
-+        data=body,
-+        headers={"Content-Type": "application/json"},
-+        method="POST",
-+    )
-+    try:
-+        with urllib.request.urlopen(request, timeout=int(os.getenv("REQUEST_TIMEOUT", "900"))) as response:
-+            return json.loads(response.read())
-+    except urllib.error.HTTPError as exc:
-+        detail = exc.read().decode("utf-8", errors="replace")
-+        raise RuntimeError(f"llama.cpp returned HTTP {exc.code}: {detail}") from exc
++class RunpodHubConfigTests(unittest.TestCase):
++    def test_hub_configuration(self):
++        config = json.loads((ROOT / ".runpod" / "hub.json").read_text())
++        self.assertEqual(config["type"], "serverless")
++        self.assertEqual(config["category"], "language")
++        self.assertEqual(config["config"]["runsOn"], "GPU")
++        self.assertGreaterEqual(config["config"]["containerDiskInGb"], 30)
++        self.assertIn("ADA_24", config["config"]["gpuIds"])
 +
-+
-+def handler(job: dict[str, Any]) -> dict[str, Any]:
-+    """Accept RunPod job.input and return the native OpenAI-compatible response."""
-+    payload = job.get("input")
-+    if not isinstance(payload, dict):
-+        raise ValueError("job.input must be a JSON object")
-+
-+    route = payload.pop("route", None)
-+    if route is None:
-+        route = "/v1/chat/completions" if "messages" in payload else "/v1/completions"
-+    if route not in ALLOWED_ROUTES:
-+        raise ValueError(f"route must be one of {sorted(ALLOWED_ROUTES)}")
-+    if payload.get("stream"):
-+        raise ValueError("stream=true is unsupported by RunPod queue jobs; use stream=false")
-+
-+    payload.setdefault("model", os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"))
-+    return forward(route, payload)
-+
-+
-+def main() -> None:
-+    cache_dir = os.getenv("HF_HOME", "/runpod-volume/huggingface")
-+    os.makedirs(cache_dir, exist_ok=True)
-+    os.environ["HF_HOME"] = cache_dir
-+    server = subprocess.Popen(build_server_command())
-+    try:
-+        wait_until_ready(int(os.getenv("STARTUP_TIMEOUT", "1800")))
-+        import runpod
-+
-+        runpod.serverless.start({"handler": handler})
-+    finally:
-+        server.terminate()
++    def test_hub_smoke_test_matches_handler_input(self):
++        config = json.loads((ROOT / ".runpod" / "tests.json").read_text())
++        smoke_test = config["tests"][0]
++        self.assertIn("messages", smoke_test["input"])
++        self.assertFalse(smoke_test["input"]["stream"])
++        self.assertGreaterEqual(smoke_test["timeout"], 1_800_000)
++        self.assertEqual(config["config"]["gpuCount"], 1)
 +
 +
 +if __name__ == "__main__":
-+    main()
++    unittest.main()

@@ -4,6 +4,13 @@ This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
 `UD-Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs. The
 handler preserves the OpenAI chat/completions response shape.
 
+## RunPod Hub
+
+The repository includes `.runpod/hub.json` and `.runpod/tests.json`, so a GitHub
+release can be indexed and tested by RunPod Hub. The Hub listing uses the
+**Language** category, one GPU with at least 24 GB VRAM, a 30 GB container disk,
+and a non-streaming chat-completion smoke test.
+
 ## 1. Build and push
 
 ```bash

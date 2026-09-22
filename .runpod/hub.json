@@ -1,0 +1,85 @@
+{
+  "title": "Qwen3.8-27B GGUF",
+  "description": "Run Qwen3.8-27B UD-Q4_K_M with CUDA llama.cpp through OpenAI-compatible chat and completion requests.",
+  "type": "serverless",
+  "category": "language",
+  "config": {
+    "runsOn": "GPU",
+    "containerDiskInGb": 30,
+    "gpuCount": 1,
+    "gpuIds": "AMPERE_24,ADA_24,AMPERE_48,ADA_48_PRO,AMPERE_80,ADA_80_PRO,HOPPER_141",
+    "presets": [
+      {
+        "name": "24 GB VRAM / 16K context",
+        "defaults": {
+          "CONTEXT_SIZE": 16384,
+          "PARALLEL": 1,
+          "CACHE_TYPE_K": "q8_0",
+          "CACHE_TYPE_V": "q8_0"
+        }
+      },
+      {
+        "name": "48 GB+ VRAM / 32K context",
+        "defaults": {
+          "CONTEXT_SIZE": 32768,
+          "PARALLEL": 1,
+          "CACHE_TYPE_K": "q8_0",
+          "CACHE_TYPE_V": "q8_0"
+        }
+      }
+    ],
+    "env": [
+      {
+        "key": "MODEL",
+        "value": "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"
+      },
+      {
+        "key": "MODEL_FILE",
+        "value": "Qwen3.8-27B-UD-Q4_K_M.gguf"
+      },
+      {
+        "key": "GPU_LAYERS",
+        "value": "999"
+      },
+      {
+        "key": "CONTEXT_SIZE",
+        "input": {
+          "name": "Context size",
+          "type": "number",
+          "description": "Maximum context tokens. Use 16384 on 24 GB GPUs.",
+          "min": 4096,
+          "max": 131072,
+          "default": 16384
+        }
+      },
+      {
+        "key": "PARALLEL",
+        "input": {
+          "name": "Parallel slots",
+          "type": "number",
+          "description": "Concurrent llama.cpp decode slots; each slot divides the configured context.",
+          "min": 1,
+          "max": 4,
+          "default": 1,
+          "advanced": true
+        }
+      },
+      {
+        "key": "CACHE_TYPE_K",
+        "value": "q8_0"
+      },
+      {
+        "key": "CACHE_TYPE_V",
+        "value": "q8_0"
+      },
+      {
+        "key": "STARTUP_TIMEOUT",
+        "value": "1800"
+      },
+      {
+        "key": "REQUEST_TIMEOUT",
+        "value": "900"
+      }
+    ]
+  }
+}

@@ -1,51 +1,53 @@
-Qwen3.8-27B GGUF RunPod Serverless configuration verification
+RunPod Hub configuration verification
 
 Changed branch/field
-- Branch: handler.handler route selection (/v1/chat/completions when job.input.messages exists; /v1/completions otherwise)
-- Field: job.input (OpenAI-compatible request object; route is optional; stream must be false)
+- Branch: RunPod Hub repository validation for required .runpod metadata and tests
+- Fields: hub.json category=language, config.runsOn=GPU, config.containerDiskInGb=30; tests.json tests[0].input and config.gpuTypeId
 
 Artifacts
-- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/handler.py
+- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/.runpod/hub.json
 - DIFF_FILE: /Users/jk/PhpstormProjects/qwen-runpod/changes.diff
 - VERIFICATION: /Users/jk/PhpstormProjects/qwen-runpod/VERIFICATION.txt
 - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
 
 Hashes
-- Original empty-workspace SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-- Modified handler.py SHA-256: d6d63a5cfaf854e81ef79b948647591e9cb8029c2f610bd70ab71f33c1184b8c
-- changes.diff SHA-256: cd6b000d449d8cd7011b5ab4dae465ac753aa20f1b3cb4f7543dceb63f623e6a
+- Original missing-file SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+- Modified hub.json SHA-256: 28e87295b4b7be183dee46511cdb2ff83aa448454f7011d32929eac27639244b
+- changes.diff SHA-256: 0451297400360290dd1f19336bb1d1cc11fa0f19b466ddc4ee37b8497dc67acc
 
 BASELINE
-Command: python3 -c 'from pathlib import Path; print("BASELINE_EMPTY" if not Path("handler.py").exists() else "BASELINE_PRESENT")'; printf 'EXIT_STATUS=%s\n' "$?"
-Input: workspace before configuration; handler.py absent
+Command: python3 -c 'from pathlib import Path; missing=[str(p) for p in (Path(".runpod/hub.json"),Path(".runpod/tests.json")) if not p.exists()]; print("BASELINE_MISSING="+",".join(missing))'; printf 'EXIT_STATUS=%s\n' "$?"
+Input: v1.0.0 workspace before Hub metadata configuration
 Literal output/result:
-BASELINE_EMPTY
+BASELINE_MISSING=.runpod/hub.json,.runpod/tests.json
 EXIT_STATUS=0
 Exit status: 0
 
 MODIFIED
-Command: python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: tests/test_handler.py against modified handler.py
+Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m json.tool .runpod/tests.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+Input: .runpod/hub.json, .runpod/tests.json, tests/test_handler.py, and tests/test_runpod_hub.py
 Literal output/result:
 test_chat_route_and_defaults (test_handler.HandlerTests.test_chat_route_and_defaults) ... ok
 test_completion_route (test_handler.HandlerTests.test_completion_route) ... ok
 test_rejects_streaming (test_handler.HandlerTests.test_rejects_streaming) ... ok
 test_rejects_unknown_route (test_handler.HandlerTests.test_rejects_unknown_route) ... ok
 test_server_command_uses_q4_model (test_handler.HandlerTests.test_server_command_uses_q4_model) ... ok
+test_hub_configuration (test_runpod_hub.RunpodHubConfigTests.test_hub_configuration) ... ok
+test_hub_smoke_test_matches_handler_input (test_runpod_hub.RunpodHubConfigTests.test_hub_smoke_test_matches_handler_input) ... ok
 
 ----------------------------------------------------------------------
-Ran 5 tests in 0.001s
+Ran 7 tests in 0.008s
 
 OK
 EXIT_STATUS=0
 Exit status: 0
 
 ROLLBACK
-Command: tmp=$(mktemp -d /tmp/qwen-runpod-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" && python3 -c 'from pathlib import Path; import sys; p=Path(sys.argv[1]); print("ROLLBACK_RESTORED_EMPTY" if not (p/"handler.py").exists() and not (p/"Dockerfile").exists() else "ROLLBACK_FAILED")' "$tmp/project"; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+Command: tmp=$(mktemp -d /tmp/qwen-runpod-hub-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" && python3 -c 'from pathlib import Path; import sys; p=Path(sys.argv[1]); print("ROLLBACK_RESTORED_HUB_MISSING" if not (p/".runpod").exists() else "ROLLBACK_FAILED")' "$tmp/project"; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
 Input: separate copy of the configured workspace
 Literal output/result:
 ROLLBACK_OK: restored empty workspace
-ROLLBACK_RESTORED_EMPTY
+ROLLBACK_RESTORED_HUB_MISSING
 EXIT_STATUS=0
 Exit status: 0
-Restored behavior/status: the rollback copy contains no configured workspace files and matches the original empty deployment behavior; the live MODIFIED_FILE remains changed.
+Restored behavior/status: the rollback copy has no .runpod configuration and matches the pre-change missing-Hub-metadata state; the live MODIFIED_FILE remains configured.
