@@ -1,0 +1,8 @@
+.git
+.github
+tests
+*.pyc
+__pycache__
+VERIFICATION.txt
+changes.diff
+ROLLBACK.sh
