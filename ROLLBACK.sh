@@ -23,12 +23,12 @@ import sys
 path = Path(sys.argv[1])
 text = path.read_text()
 text = text.replace(
+    "ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9",
     "ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f",
-    "ghcr.io/ggerganov/llama.cpp:server-cuda",
     1,
 )
 path.write_text(text)
-print("ROLLBACK_OK: restored previous llama.cpp image reference")
+print("ROLLBACK_OK: restored previous server-cuda image reference")
 PY
   exit 0
 fi

@@ -11,7 +11,7 @@ class RunpodHubConfigTests(unittest.TestCase):
     def test_dockerfile_uses_resolvable_official_llama_image(self):
         dockerfile = (ROOT / "Dockerfile").read_text()
         first_line = dockerfile.splitlines()[0]
-        self.assertTrue(first_line.startswith("FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:"))
+        self.assertTrue(first_line.startswith("FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:"))
         self.assertRegex(first_line, re.compile(r"@sha256:[0-9a-f]{64}$"))
         self.assertNotIn("ghcr.io/ggerganov/", dockerfile)
 

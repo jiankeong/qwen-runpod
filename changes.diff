@@ -1,63 +1,57 @@
-diff --git a/.runpod/tests.json b/.runpod/tests.json
-index 0f6d902..24c7efb 100644
---- a/.runpod/tests.json
-+++ b/.runpod/tests.json
-@@ -17,7 +17,7 @@
-     }
-   ],
-   "config": {
--    "gpuTypeId": "NVIDIA GeForce RTX 4090",
-+    "gpuTypeId": "NVIDIA A40",
-     "gpuCount": 1,
-     "env": [
-       {
+diff --git a/Dockerfile b/Dockerfile
+index 7b66e8a..7aa3f80 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,4 +1,4 @@
+-FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f
++FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9
+ 
+ USER root
+ RUN apt-get update \
 diff --git a/README.md b/README.md
-index fe1aef8..f0b8112 100644
+index f0b8112..89d970f 100644
 --- a/README.md
 +++ b/README.md
-@@ -12,7 +12,8 @@ current `ggml-org/llama.cpp` GitHub Container Registry namespace.
- The repository includes `.runpod/hub.json` and `.runpod/tests.json`, so a GitHub
- release can be indexed and tested by RunPod Hub. The Hub listing uses the
- **Language** category, one GPU with at least 24 GB VRAM, a 30 GB container disk,
--and a non-streaming chat-completion smoke test.
-+and a non-streaming chat-completion smoke test on the datacenter-oriented 48 GB
-+NVIDIA A40 pool.
+@@ -5,7 +5,9 @@ This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
+ handler preserves the OpenAI chat/completions response shape.
  
- ## 1. Build and push
+ The Docker build pins the verified multi-architecture CUDA 12 image from the
+-current `ggml-org/llama.cpp` GitHub Container Registry namespace.
++current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
++`full-cuda` runtime so `llama-server` and its split implementation library ship
++together.
+ 
+ ## RunPod Hub
  
 diff --git a/ROLLBACK.sh b/ROLLBACK.sh
-index f9053b8..5f1bfca 100755
+index 5f1bfca..beffd7f 100755
 --- a/ROLLBACK.sh
 +++ b/ROLLBACK.sh
-@@ -2,6 +2,19 @@
- set -euo pipefail
- 
- root="${1:-$(pwd)}"
-+if [[ "${2:-}" == "--test-gpu-only" ]]; then
-+  python3 - "$root/.runpod/tests.json" <<'PY'
-+from pathlib import Path
-+import sys
-+
-+path = Path(sys.argv[1])
-+text = path.read_text().replace('"gpuTypeId": "NVIDIA A40"', '"gpuTypeId": "NVIDIA GeForce RTX 4090"', 1)
-+path.write_text(text)
-+print("ROLLBACK_OK: restored previous Hub test GPU")
-+PY
-+  exit 0
-+fi
-+
- if [[ "${2:-}" == "--image-fix-only" ]]; then
-   python3 - "$root/Dockerfile" <<'PY'
- from pathlib import Path
+@@ -23,12 +23,12 @@ import sys
+ path = Path(sys.argv[1])
+ text = path.read_text()
+ text = text.replace(
++    "ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9",
+     "ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f",
+-    "ghcr.io/ggerganov/llama.cpp:server-cuda",
+     1,
+ )
+ path.write_text(text)
+-print("ROLLBACK_OK: restored previous llama.cpp image reference")
++print("ROLLBACK_OK: restored previous server-cuda image reference")
+ PY
+   exit 0
+ fi
 diff --git a/tests/test_runpod_hub.py b/tests/test_runpod_hub.py
-index 09e4ac4..e4e3b4a 100644
+index e4e3b4a..714621a 100644
 --- a/tests/test_runpod_hub.py
 +++ b/tests/test_runpod_hub.py
-@@ -29,6 +29,7 @@ class RunpodHubConfigTests(unittest.TestCase):
-         self.assertIn("messages", smoke_test["input"])
-         self.assertFalse(smoke_test["input"]["stream"])
-         self.assertGreaterEqual(smoke_test["timeout"], 1_800_000)
-+        self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA A40")
-         self.assertEqual(config["config"]["gpuCount"], 1)
- 
+@@ -11,7 +11,7 @@ class RunpodHubConfigTests(unittest.TestCase):
+     def test_dockerfile_uses_resolvable_official_llama_image(self):
+         dockerfile = (ROOT / "Dockerfile").read_text()
+         first_line = dockerfile.splitlines()[0]
+-        self.assertTrue(first_line.startswith("FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:"))
++        self.assertTrue(first_line.startswith("FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:"))
+         self.assertRegex(first_line, re.compile(r"@sha256:[0-9a-f]{64}$"))
+         self.assertNotIn("ghcr.io/ggerganov/", dockerfile)
  

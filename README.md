@@ -5,7 +5,9 @@ This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
 handler preserves the OpenAI chat/completions response shape.
 
 The Docker build pins the verified multi-architecture CUDA 12 image from the
-current `ggml-org/llama.cpp` GitHub Container Registry namespace.
+current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
+`full-cuda` runtime so `llama-server` and its split implementation library ship
+together.
 
 ## RunPod Hub
 
