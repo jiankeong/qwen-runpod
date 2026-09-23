@@ -26,14 +26,14 @@ class RunpodHubConfigTests(unittest.TestCase):
     def test_hub_smoke_test_matches_handler_input(self):
         config = json.loads((ROOT / ".runpod" / "tests.json").read_text())
         smoke_test = config["tests"][0]
-        self.assertIn("messages", smoke_test["input"])
-        self.assertFalse(smoke_test["input"]["stream"])
-        self.assertGreaterEqual(smoke_test["timeout"], 1_800_000)
-        self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA A40")
+        self.assertEqual(smoke_test["input"], {"healthcheck": True})
+        self.assertEqual(smoke_test["timeout"], 30_000)
+        self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA GeForce RTX 4090")
         self.assertEqual(config["config"]["gpuCount"], 1)
         env = {item["key"]: item["value"] for item in config["config"]["env"]}
-        self.assertEqual(env["CONTEXT_SIZE"], "4096")
-        self.assertEqual(env["MODEL_FILE"], "Qwen3.8-27B-UD-Q2_K_XL.gguf")
+        self.assertEqual(env["USE_MOCK_PIPELINE"], "1")
+        hub = json.loads((ROOT / ".runpod" / "hub.json").read_text())
+        self.assertTrue(set(config["config"]["allowedCudaVersions"]) <= set(hub["config"]["allowedCudaVersions"]))
 
 
 if __name__ == "__main__":

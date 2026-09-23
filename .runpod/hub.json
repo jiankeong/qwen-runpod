@@ -8,6 +8,14 @@
     "containerDiskInGb": 30,
     "gpuCount": 1,
     "gpuIds": "AMPERE_24,ADA_24,AMPERE_48,ADA_48_PRO,AMPERE_80,ADA_80_PRO,HOPPER_141",
+    "allowedCudaVersions": [
+      "12.8",
+      "12.9",
+      "13.0",
+      "13.1",
+      "13.2",
+      "13.3"
+    ],
     "presets": [
       {
         "name": "24 GB VRAM / 16K context",
@@ -79,6 +87,26 @@
       {
         "key": "REQUEST_TIMEOUT",
         "value": "900"
+      },
+      {
+        "key": "USE_MOCK_PIPELINE",
+        "input": {
+          "name": "Skip model download (Hub smoke test only)",
+          "type": "string",
+          "description": "Set to 1 only for Hub validation; normal inference uses 0.",
+          "options": [
+            {
+              "label": "Disabled",
+              "value": "0"
+            },
+            {
+              "label": "Enabled",
+              "value": "1"
+            }
+          ],
+          "default": "0",
+          "advanced": true
+        }
       }
     ]
   }

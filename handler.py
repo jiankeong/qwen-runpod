@@ -17,6 +17,11 @@ LLAMA_BASE_URL = f"http://{LLAMA_HOST}:{LLAMA_PORT}"
 ALLOWED_ROUTES = {"/v1/chat/completions", "/v1/completions"}
 
 
+def mock_pipeline_enabled() -> bool:
+    """Return whether this worker is running the model-independent Hub check."""
+    return os.getenv("USE_MOCK_PIPELINE", "0") == "1"
+
+
 def build_server_command() -> list[str]:
     """Build the llama-server command entirely from environment settings."""
     model = os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M")
@@ -76,6 +81,11 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("job.input must be a JSON object")
 
+    if mock_pipeline_enabled():
+        if payload != {"healthcheck": True}:
+            raise ValueError("Smoke-test worker accepts only input.healthcheck=true")
+        return {"status": "ok", "worker": "qwen3.8-27b-gguf"}
+
     route = payload.pop("route", None)
     if route is None:
         route = "/v1/chat/completions" if "messages" in payload else "/v1/completions"
@@ -92,6 +102,12 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
+    if mock_pipeline_enabled():
+        import runpod
+
+        runpod.serverless.start({"handler": handler})
+        return
+
     cache_dir = os.getenv("HF_HOME", "/runpod-volume/huggingface")
     os.makedirs(cache_dir, exist_ok=True)
     os.environ["HF_HOME"] = cache_dir

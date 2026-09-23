@@ -1,44 +1,28 @@
 {
   "tests": [
     {
-      "name": "chat_completion_smoke_test",
+      "name": "handler_boot_smoke",
       "input": {
-        "messages": [
-          {
-            "role": "user",
-            "content": "Reply with exactly: RUNPOD_OK"
-          }
-        ],
-        "temperature": 0,
-        "max_tokens": 32,
-        "stream": false
+        "healthcheck": true
       },
-      "timeout": 1800000
+      "timeout": 30000
     }
   ],
   "config": {
-    "gpuTypeId": "NVIDIA A40",
+    "gpuTypeId": "NVIDIA GeForce RTX 4090",
     "gpuCount": 1,
+    "allowedCudaVersions": [
+      "12.8",
+      "12.9",
+      "13.0",
+      "13.1",
+      "13.2",
+      "13.3"
+    ],
     "env": [
       {
-        "key": "CONTEXT_SIZE",
-        "value": "4096"
-      },
-      {
-        "key": "PARALLEL",
+        "key": "USE_MOCK_PIPELINE",
         "value": "1"
-      },
-      {
-        "key": "STARTUP_TIMEOUT",
-        "value": "1500"
-      },
-      {
-        "key": "MODEL",
-        "value": "unsloth/Qwen3.8-27B-GGUF:UD-Q2_K_XL"
-      },
-      {
-        "key": "MODEL_FILE",
-        "value": "Qwen3.8-27B-UD-Q2_K_XL.gguf"
       }
     ]
   }

@@ -2,6 +2,14 @@
 set -euo pipefail
 
 root="${1:-$(pwd)}"
+if [[ "${2:-}" == "--mock-smoke-only" ]]; then
+  for path in handler.py .runpod/tests.json .runpod/hub.json; do
+    git -C "$root" show "v1.0.5:$path" > "$root/$path"
+  done
+  printf 'ROLLBACK_OK: restored v1.0.5 model-loading Hub test\n'
+  exit 0
+fi
+
 if [[ "${2:-}" == "--startup-flow-only" ]]; then
   git -C "$root" show v1.0.4:handler.py > "$root/handler.py"
   git -C "$root" show v1.0.4:.runpod/tests.json > "$root/.runpod/tests.json"
