@@ -11,22 +11,16 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m pip install --no-cache-dir --break-system-packages runpod==1.8.1
 
-ARG MODEL_URL="https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-UD-Q4_K_M.gguf?download=true"
-RUN mkdir -p /models \
-    && curl --fail --location --retry 5 --retry-delay 5 \
-        --output /models/Qwen3.8-27B-UD-Q4_K_M.gguf "$MODEL_URL" \
-    && test "$(stat -c %s /models/Qwen3.8-27B-UD-Q4_K_M.gguf)" -gt 15000000000
-
 WORKDIR /worker
 COPY handler.py /worker/handler.py
 
 ENV MODEL="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M" \
     MODEL_FILE="Qwen3.8-27B-UD-Q4_K_M.gguf" \
-    MODEL_PATH="/models/Qwen3.8-27B-UD-Q4_K_M.gguf" \
     CONTEXT_SIZE="16384" \
     PARALLEL="1" \
     GPU_LAYERS="999" \
-    HF_HOME="/runpod-volume/huggingface"
+    HF_HOME="/runpod-volume/huggingface" \
+    LLAMA_CACHE="/runpod-volume/huggingface/hub"
 
 ENTRYPOINT []
 CMD ["python3", "-u", "/worker/handler.py"]

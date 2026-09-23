@@ -1,152 +1,239 @@
 diff --git a/.runpod/hub.json b/.runpod/hub.json
-index 2dab315..8a40502 100644
+index 8a40502..1c895d0 100644
 --- a/.runpod/hub.json
 +++ b/.runpod/hub.json
 @@ -5,7 +5,7 @@
    "category": "language",
    "config": {
      "runsOn": "GPU",
--    "containerDiskInGb": 30,
-+    "containerDiskInGb": 40,
+-    "containerDiskInGb": 40,
++    "containerDiskInGb": 30,
      "gpuCount": 1,
      "gpuIds": "AMPERE_24,ADA_24,AMPERE_48,ADA_48_PRO,AMPERE_80,ADA_80_PRO,HOPPER_141",
      "allowedCudaVersions": [
+@@ -88,6 +88,10 @@
+         "key": "REQUEST_TIMEOUT",
+         "value": "900"
+       },
++      {
++        "key": "LLAMA_CACHE",
++        "value": "/runpod-volume/huggingface/hub"
++      },
+       {
+         "key": "USE_MOCK_PIPELINE",
+         "input": {
 diff --git a/Dockerfile b/Dockerfile
-index 087f639..43f7022 100644
+index 43f7022..3dc0352 100644
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -11,11 +11,18 @@ RUN apt-get update \
+@@ -11,22 +11,16 @@ RUN apt-get update \
      && rm -rf /var/lib/apt/lists/* \
      && python3 -m pip install --no-cache-dir --break-system-packages runpod==1.8.1
  
-+ARG MODEL_URL="https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-UD-Q4_K_M.gguf?download=true"
-+RUN mkdir -p /models \
-+    && curl --fail --location --retry 5 --retry-delay 5 \
-+        --output /models/Qwen3.8-27B-UD-Q4_K_M.gguf "$MODEL_URL" \
-+    && test "$(stat -c %s /models/Qwen3.8-27B-UD-Q4_K_M.gguf)" -gt 15000000000
-+
+-ARG MODEL_URL="https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-UD-Q4_K_M.gguf?download=true"
+-RUN mkdir -p /models \
+-    && curl --fail --location --retry 5 --retry-delay 5 \
+-        --output /models/Qwen3.8-27B-UD-Q4_K_M.gguf "$MODEL_URL" \
+-    && test "$(stat -c %s /models/Qwen3.8-27B-UD-Q4_K_M.gguf)" -gt 15000000000
+-
  WORKDIR /worker
  COPY handler.py /worker/handler.py
  
  ENV MODEL="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M" \
      MODEL_FILE="Qwen3.8-27B-UD-Q4_K_M.gguf" \
-+    MODEL_PATH="/models/Qwen3.8-27B-UD-Q4_K_M.gguf" \
+-    MODEL_PATH="/models/Qwen3.8-27B-UD-Q4_K_M.gguf" \
      CONTEXT_SIZE="16384" \
      PARALLEL="1" \
      GPU_LAYERS="999" \
+-    HF_HOME="/runpod-volume/huggingface"
++    HF_HOME="/runpod-volume/huggingface" \
++    LLAMA_CACHE="/runpod-volume/huggingface/hub"
+ 
+ ENTRYPOINT []
+ CMD ["python3", "-u", "/worker/handler.py"]
 diff --git a/README.md b/README.md
-index b3c6591..bf8eb44 100644
+index bf8eb44..77611af 100644
 --- a/README.md
 +++ b/README.md
-@@ -7,7 +7,9 @@ handler preserves the OpenAI chat/completions response shape.
+@@ -7,9 +7,7 @@ handler preserves the OpenAI chat/completions response shape.
  The Docker build pins the verified multi-architecture CUDA 12 image from the
  current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
  `full-cuda` runtime so `llama-server` and its split implementation library ship
--together. The build registers `/app` with the dynamic linker and executes
-+together. The 16.5 GB Q4_K_M file is baked into the image, so Serverless workers
-+do not require a separate Pod or a first-request model download. The build
-+registers `/app` with the dynamic linker and executes
+-together. The 16.5 GB Q4_K_M file is baked into the image, so Serverless workers
+-do not require a separate Pod or a first-request model download. The build
+-registers `/app` with the dynamic linker and executes
++together. The build registers `/app` with the dynamic linker and executes
  `llama-server --version`, so a missing `libllama-server-impl.so` fails during
  the image build rather than leaving a queued job waiting for startup.
  
-@@ -21,7 +23,8 @@ NVIDIA GPU pool. Following the working `qwen-image-2-1` Hub pattern, validation
+@@ -23,8 +21,8 @@ NVIDIA GPU pool. Following the working `qwen-image-2-1` Hub pattern, validation
  sets `USE_MOCK_PIPELINE=1` and checks only that the RunPod handler boots and
  returns a response within 30 seconds. It does not download model weights.
  The Hub smoke test targets an A40 to avoid the 4090 pool's reservation failures.
--Normal deployments keep `USE_MOCK_PIPELINE=0` and use Q4_K_M with 16K context.
-+Normal deployments keep `USE_MOCK_PIPELINE=0` and load the baked Q4_K_M file
-+with 16K context.
+-Normal deployments keep `USE_MOCK_PIPELINE=0` and load the baked Q4_K_M file
+-with 16K context.
++Normal deployments keep `USE_MOCK_PIPELINE=0`, download Q4_K_M into the mounted
++Network Volume on first use, and reuse it on later workers with 16K context.
  
  ## 1. Build and push
  
+@@ -44,6 +42,9 @@ IMAGE=ghcr.io/YOUR_USER/qwen38-runpod:latest ./deploy.sh
+ 4. Add the environment variables from `.env.example`. `HF_TOKEN` is optional
+    for this public model.
+ 
++The image sets `LLAMA_CACHE=/runpod-volume/huggingface/hub`, matching the
++mounted volume explicitly so llama.cpp does not fall back to ephemeral storage.
++
+ `CONTEXT_SIZE=16384` is chosen so Q4 weights, KV cache, and runtime buffers fit a
+ 24 GB GPU. Use 32–48 GB VRAM before raising context or `PARALLEL`.
+ 
 diff --git a/ROLLBACK.sh b/ROLLBACK.sh
-index faa967c..801e352 100755
+index 801e352..57cb8dd 100755
 --- a/ROLLBACK.sh
 +++ b/ROLLBACK.sh
 @@ -2,6 +2,14 @@
  set -euo pipefail
  
  root="${1:-$(pwd)}"
-+if [[ "${2:-}" == "--baked-model-only" ]]; then
++if [[ "${2:-}" == "--network-volume-only" ]]; then
 +  for path in Dockerfile handler.py .runpod/hub.json; do
-+    git -C "$root" show "v1.0.8:$path" > "$root/$path"
++    git -C "$root" show "v1.0.9:$path" > "$root/$path"
 +  done
-+  printf 'ROLLBACK_OK: restored v1.0.8 runtime model download\n'
++  printf 'ROLLBACK_OK: restored v1.0.9 baked-model image\n'
 +  exit 0
 +fi
 +
- if [[ "${2:-}" == "--loader-path-only" ]]; then
-   git -C "$root" show v1.0.7:Dockerfile > "$root/Dockerfile"
-   printf 'ROLLBACK_OK: restored v1.0.7 Dockerfile without linker registration\n'
+ if [[ "${2:-}" == "--baked-model-only" ]]; then
+   for path in Dockerfile handler.py .runpod/hub.json; do
+     git -C "$root" show "v1.0.8:$path" > "$root/$path"
+diff --git a/VERIFICATION.txt b/VERIFICATION.txt
+index fd11214..06ee69e 100644
+--- a/VERIFICATION.txt
++++ b/VERIFICATION.txt
+@@ -1,8 +1,8 @@
+-RunPod v1.0.9 Serverless-only baked-model verification
++RunPod v1.0.10 Network Volume model-cache verification
+ 
+ Changed branch/field
+-- Branch: Serverless cold start before llama-server readiness
+-- Fields: Dockerfile downloads Q4_K_M during image build; handler.py prefers MODEL_PATH; hub container disk increases from 30 GB to 40 GB
++- Branch: Serverless model storage and cold-start reuse
++- Fields: remove baked MODEL_PATH; restore --hf-repo/--hf-file; set LLAMA_CACHE=/runpod-volume/huggingface/hub; restore 30 GB container disk
+ 
+ Artifacts
+ - MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/Dockerfile
+@@ -11,26 +11,26 @@ Artifacts
+ - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
+ 
+ Hashes
+-- Original Dockerfile SHA-256: cbc2be3920fac35e43e2294fac6e0386810ccdc2bbcfe0bc9e96662042f82f84
+-- Modified Dockerfile SHA-256: 334b7a88eefb3e2be30eebd617ced4b1335d0fcd24be0af590cec7f349f8a1d0
+-- Original handler.py SHA-256: 523739c0adb1ac535962570b0bdb7319afdc34edb25ad928dc6899b3c3f691c7
+-- Modified handler.py SHA-256: 7d46e9e1e6c931a3314638bb22759e64d8e5534a578dd11edd7fdfc843b9a01e
++- Original Dockerfile SHA-256: 334b7a88eefb3e2be30eebd617ced4b1335d0fcd24be0af590cec7f349f8a1d0
++- Modified Dockerfile SHA-256: 3b6f38c1bb91b26f5985c04c1f5125958f1ec9429efb80dceb23abbf4ef5de6a
++- Original handler.py SHA-256: 7d46e9e1e6c931a3314638bb22759e64d8e5534a578dd11edd7fdfc843b9a01e
++- Modified handler.py SHA-256: 523739c0adb1ac535962570b0bdb7319afdc34edb25ad928dc6899b3c3f691c7
+ 
+ BASELINE
+ Command: python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+-Input: v1.0.8 runtime-download configuration
+-Literal output/result: Ran 11 tests in 0.009s; OK; EXIT_STATUS=0
++Input: v1.0.9 baked-model configuration
++Literal output/result: Ran 12 tests in 0.007s; OK; EXIT_STATUS=0
+ Exit status: 0
+ 
+ MODIFIED
+-Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import os,handler; os.environ["MODEL_PATH"]="/models/Qwen3.8-27B-UD-Q4_K_M.gguf"; c=handler.build_server_command(); print("MODIFIED_MODEL_ARGS="+" ".join(c[c.index("--model"):c.index("--model")+2])); print("MODIFIED_USES_HF="+str("--hf-repo" in c))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+-Input: baked Q4_K_M model path and 40 GB container disk
+-Literal output/result: Ran 12 tests in 0.004s; OK; MODIFIED_MODEL_ARGS=--model /models/Qwen3.8-27B-UD-Q4_K_M.gguf; MODIFIED_USES_HF=False; EXIT_STATUS=0
++Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json,handler; h=json.load(open(".runpod/hub.json")); env={x["key"]:x.get("value") for x in h["config"]["env"]}; c=handler.build_server_command(); print("MODIFIED_CACHE="+env["LLAMA_CACHE"]); print("MODIFIED_DISK_GB="+str(h["config"]["containerDiskInGb"])); print("MODIFIED_USES_HF="+str("--hf-repo" in c)); print("MODIFIED_BAKED_MODEL="+str("--model" in c))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
++Input: Network Volume cache configuration
++Literal output/result: Ran 11 tests in 0.006s; OK; MODIFIED_CACHE=/runpod-volume/huggingface/hub; MODIFIED_DISK_GB=30; MODIFIED_USES_HF=True; MODIFIED_BAKED_MODEL=False; EXIT_STATUS=0
+ Exit status: 0
+ 
+ ROLLBACK
+-Command: tmp=$(mktemp -d /tmp/qwen-runpod-v109-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --baked-model-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); d=(root/"Dockerfile").read_text(); h=(root/"handler.py").read_text(); hub=json.loads((root/".runpod/hub.json").read_text()); print("ROLLBACK_BAKED_MODEL="+str("MODEL_URL" in d)); print("ROLLBACK_MODEL_PATH="+str("MODEL_PATH" in h)); print("ROLLBACK_DISK_GB="+str(hub["config"]["containerDiskInGb"])); assert "MODEL_URL" not in d and hub["config"]["containerDiskInGb"]==30' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
+-Input: separate copy of v1.0.9 workspace
+-Literal output/result: ROLLBACK_OK: restored v1.0.8 runtime model download; ROLLBACK_BAKED_MODEL=False; ROLLBACK_MODEL_PATH=False; ROLLBACK_DISK_GB=30; ROLLBACK_COPY=/tmp/qwen-runpod-v109-rollback.wdmlLU/project; EXIT_STATUS=0
++Command: tmp=$(mktemp -d /tmp/qwen-runpod-v110-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --network-volume-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); d=(root/"Dockerfile").read_text(); h=(root/"handler.py").read_text(); hub=json.loads((root/".runpod/hub.json").read_text()); print("ROLLBACK_BAKED_MODEL="+str("MODEL_URL" in d)); print("ROLLBACK_MODEL_PATH="+str("MODEL_PATH" in h)); print("ROLLBACK_DISK_GB="+str(hub["config"]["containerDiskInGb"])); assert "MODEL_URL" in d and hub["config"]["containerDiskInGb"]==40' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
++Input: separate copy of v1.0.10 workspace
++Literal output/result: ROLLBACK_OK: restored v1.0.9 baked-model image; ROLLBACK_BAKED_MODEL=True; ROLLBACK_MODEL_PATH=True; ROLLBACK_DISK_GB=40; ROLLBACK_COPY=/tmp/qwen-runpod-v110-rollback.Rt8dno/project; EXIT_STATUS=0
+ Exit status: 0
+-Restored behavior/status: rollback copy again downloads from Hugging Face at runtime; live MODIFIED_FILE loads the baked model directly and needs no Pod or Network Volume.
++Restored behavior/status: rollback copy again embeds the model in a 40 GB image; live MODIFIED_FILE caches the first download in the mounted Network Volume.
 diff --git a/handler.py b/handler.py
-index b2a77cb..c52caef 100644
+index c52caef..b2a77cb 100644
 --- a/handler.py
 +++ b/handler.py
-@@ -29,8 +29,16 @@ def build_server_command() -> list[str]:
+@@ -29,16 +29,8 @@ def build_server_command() -> list[str]:
          os.getenv("LLAMA_SERVER_BIN", "/app/llama-server"),
          "--host", LLAMA_HOST,
          "--port", str(LLAMA_PORT),
--        "--hf-repo", model.split(":", 1)[0],
--        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
-+    ]
-+    model_path = os.getenv("MODEL_PATH")
-+    if model_path:
-+        command.extend(["--model", model_path])
-+    else:
-+        command.extend([
-+            "--hf-repo", model.split(":", 1)[0],
-+            "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
-+        ])
-+    command.extend([
+-    ]
+-    model_path = os.getenv("MODEL_PATH")
+-    if model_path:
+-        command.extend(["--model", model_path])
+-    else:
+-        command.extend([
+-            "--hf-repo", model.split(":", 1)[0],
+-            "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
+-        ])
+-    command.extend([
++        "--hf-repo", model.split(":", 1)[0],
++        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
          "--n-gpu-layers", os.getenv("GPU_LAYERS", "999"),
          "--ctx-size", os.getenv("CONTEXT_SIZE", "16384"),
          "--parallel", os.getenv("PARALLEL", "1"),
-@@ -38,7 +46,7 @@ def build_server_command() -> list[str]:
+@@ -46,7 +38,7 @@ def build_server_command() -> list[str]:
          "--cache-type-v", os.getenv("CACHE_TYPE_V", "q8_0"),
          "--flash-attn", "on",
          "--jinja",
--    ]
-+    ])
+-    ])
++    ]
      if os.getenv("HF_TOKEN"):
          command.extend(["--hf-token", os.environ["HF_TOKEN"]])
      return command
 diff --git a/tests/test_handler.py b/tests/test_handler.py
-index a52e32f..7898eab 100644
+index 7898eab..a52e32f 100644
 --- a/tests/test_handler.py
 +++ b/tests/test_handler.py
-@@ -41,6 +41,14 @@ class HandlerTests(unittest.TestCase):
+@@ -41,14 +41,6 @@ class HandlerTests(unittest.TestCase):
          self.assertIn("Qwen3.8-27B-UD-Q4_K_M.gguf", command)
          self.assertIn("16384", command)
  
-+    def test_server_command_prefers_baked_model(self):
-+        model_path = "/models/Qwen3.8-27B-UD-Q4_K_M.gguf"
-+        with patch.dict(os.environ, {"MODEL_PATH": model_path}, clear=True):
-+            command = handler.build_server_command()
-+        self.assertIn("--model", command)
-+        self.assertIn(model_path, command)
-+        self.assertNotIn("--hf-repo", command)
-+
+-    def test_server_command_prefers_baked_model(self):
+-        model_path = "/models/Qwen3.8-27B-UD-Q4_K_M.gguf"
+-        with patch.dict(os.environ, {"MODEL_PATH": model_path}, clear=True):
+-            command = handler.build_server_command()
+-        self.assertIn("--model", command)
+-        self.assertIn(model_path, command)
+-        self.assertNotIn("--hf-repo", command)
+-
      def test_mock_pipeline_returns_without_waiting_for_model(self):
          with patch.dict(os.environ, {"USE_MOCK_PIPELINE": "1"}, clear=True):
              result = handler.handler({"input": {"healthcheck": True}})
 diff --git a/tests/test_runpod_hub.py b/tests/test_runpod_hub.py
-index 6b59713..fc046f1 100644
+index fc046f1..bfa5e43 100644
 --- a/tests/test_runpod_hub.py
 +++ b/tests/test_runpod_hub.py
-@@ -17,13 +17,15 @@ class RunpodHubConfigTests(unittest.TestCase):
+@@ -17,15 +17,16 @@ class RunpodHubConfigTests(unittest.TestCase):
          self.assertIn("test -f /app/libllama-server-impl.so", dockerfile)
          self.assertIn("/etc/ld.so.conf.d/llama-cpp.conf", dockerfile)
          self.assertIn("/app/llama-server --version", dockerfile)
-+        self.assertIn("MODEL_PATH=\"/models/Qwen3.8-27B-UD-Q4_K_M.gguf\"", dockerfile)
-+        self.assertIn("stat -c %s /models/Qwen3.8-27B-UD-Q4_K_M.gguf", dockerfile)
+-        self.assertIn("MODEL_PATH=\"/models/Qwen3.8-27B-UD-Q4_K_M.gguf\"", dockerfile)
+-        self.assertIn("stat -c %s /models/Qwen3.8-27B-UD-Q4_K_M.gguf", dockerfile)
++        self.assertIn('LLAMA_CACHE="/runpod-volume/huggingface/hub"', dockerfile)
  
      def test_hub_configuration(self):
          config = json.loads((ROOT / ".runpod" / "hub.json").read_text())
          self.assertEqual(config["type"], "serverless")
          self.assertEqual(config["category"], "language")
          self.assertEqual(config["config"]["runsOn"], "GPU")
--        self.assertGreaterEqual(config["config"]["containerDiskInGb"], 30)
-+        self.assertGreaterEqual(config["config"]["containerDiskInGb"], 40)
+-        self.assertGreaterEqual(config["config"]["containerDiskInGb"], 40)
++        self.assertGreaterEqual(config["config"]["containerDiskInGb"], 30)
++        env = {item["key"]: item.get("value") for item in config["config"]["env"]}
++        self.assertEqual(env["LLAMA_CACHE"], "/runpod-volume/huggingface/hub")
          self.assertIn("ADA_24", config["config"]["gpuIds"])
  
      def test_hub_smoke_test_matches_handler_input(self):
