@@ -19,7 +19,7 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(route, "/v1/chat/completions")
         self.assertIn("model", payload)
         self.assertEqual(result["choices"][0]["message"]["content"], "ok")
-        self.ready.assert_called_once_with(1800)
+        self.ready.assert_not_called()
 
     @patch("handler.forward")
     def test_completion_route(self, forward):
@@ -62,6 +62,22 @@ class HandlerTests(unittest.TestCase):
             handler.main()
         popen.assert_not_called()
         fake_runpod.serverless.start.assert_called_once()
+
+    def test_normal_main_waits_for_model_before_registering_worker(self):
+        fake_runpod = MagicMock()
+        server = MagicMock()
+        events = []
+        fake_runpod.serverless.start.side_effect = lambda config: events.append("worker_registered")
+        with (
+            patch.dict(os.environ, {"USE_MOCK_PIPELINE": "0", "STARTUP_TIMEOUT": "1800"}, clear=True),
+            patch.dict("sys.modules", {"runpod": fake_runpod}),
+            patch("handler.os.makedirs"),
+            patch("handler.subprocess.Popen", return_value=server),
+            patch("handler.wait_until_ready", side_effect=lambda timeout: events.append(f"ready:{timeout}")),
+        ):
+            handler.main()
+        self.assertEqual(events, ["ready:1800", "worker_registered"])
+        server.terminate.assert_called_once_with()
 
 
 if __name__ == "__main__":

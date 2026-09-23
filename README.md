@@ -24,6 +24,8 @@ The Hub smoke test targets an RTX 4090, matching the working
 `qwen-image-2-1` configuration and avoiding the unavailable A40/A6000/L40 pool.
 Normal deployments keep `USE_MOCK_PIPELINE=0`, download Q4_K_M into the mounted
 Network Volume on first use, and reuse it on later workers with 16K context.
+The worker registers with the RunPod queue only after llama.cpp reports healthy,
+so cold-start download and model loading do not consume the job execution timer.
 
 ## 1. Build and push
 

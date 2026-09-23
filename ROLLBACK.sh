@@ -2,6 +2,14 @@
 set -euo pipefail
 
 root="${1:-$(pwd)}"
+if [[ "${2:-}" == "--worker-readiness-only" ]]; then
+  for path in handler.py tests/test_handler.py README.md; do
+    git -C "$root" show "v1.0.11:$path" > "$root/$path"
+  done
+  printf 'ROLLBACK_OK: restored v1.0.11 early worker registration\n'
+  exit 0
+fi
+
 if [[ "${2:-}" == "--test-gpu-4090-only" ]]; then
   for path in .runpod/tests.json README.md tests/test_runpod_hub.py; do
     git -C "$root" show "v1.0.10:$path" > "$root/$path"
