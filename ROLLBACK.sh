@@ -2,6 +2,14 @@
 set -euo pipefail
 
 root="${1:-$(pwd)}"
+if [[ "${2:-}" == "--model-switch-only" ]]; then
+  for path in handler.py Dockerfile .env.example .runpod/hub.json README.md tests/test_handler.py tests/test_runpod_hub.py; do
+    git -C "$root" show "v1.0.12:$path" > "$root/$path"
+  done
+  printf 'ROLLBACK_OK: restored v1.0.12 Unsloth model source\n'
+  exit 0
+fi
+
 if [[ "${2:-}" == "--worker-readiness-only" ]]; then
   for path in handler.py tests/test_handler.py README.md; do
     git -C "$root" show "v1.0.11:$path" > "$root/$path"

@@ -1,8 +1,8 @@
-# Qwen3.8-27B GGUF on RunPod Serverless
+# Qwen3.8-27B Uncensored GGUF on RunPod Serverless
 
-This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
-`UD-Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs. The
-handler preserves the OpenAI chat/completions response shape.
+This worker launches current CUDA `llama.cpp`, downloads JonathanColetti's
+16.8 GB `Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs.
+The handler preserves the OpenAI chat/completions response shape.
 
 The Docker build pins the verified multi-architecture CUDA 12 image from the
 current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
@@ -37,7 +37,9 @@ IMAGE=ghcr.io/YOUR_USER/qwen38-runpod:latest ./deploy.sh
 ## 2. RunPod endpoint settings
 
 1. Create a **25 GB or larger network volume** and mount it at `/runpod-volume`.
-   The first worker caches the 16.5 GB model there; later cold starts reuse it.
+   The first worker caches the 16.8 GB model there; later cold starts reuse it.
+   When reusing a volume from versions through v1.0.12, delete its previous
+   `models--unsloth--Qwen3.8-27B-GGUF` cache or temporarily use at least 40 GB.
 2. Create a Serverless template from the pushed image. Container disk: **10 GB**.
 3. Create an endpoint with that template. Select **24 GB+ VRAM** GPUs (L4, RTX
    4090, A5000, A6000, L40/L40S, A100). Start with workers `0–1`, idle timeout

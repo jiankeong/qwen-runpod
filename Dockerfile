@@ -14,8 +14,8 @@ RUN apt-get update \
 WORKDIR /worker
 COPY handler.py /worker/handler.py
 
-ENV MODEL="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M" \
-    MODEL_FILE="Qwen3.8-27B-UD-Q4_K_M.gguf" \
+ENV MODEL="JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M" \
+    MODEL_FILE="Qwen3.8-27B-Uncensored-Q4_K_M.gguf" \
     CONTEXT_SIZE="16384" \
     PARALLEL="1" \
     GPU_LAYERS="999" \

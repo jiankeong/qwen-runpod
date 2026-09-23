@@ -1,147 +1,211 @@
+diff --git a/.env.example b/.env.example
+index 1efdd8d..950ffd3 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,5 +1,5 @@
+-MODEL=unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M
+-MODEL_FILE=Qwen3.8-27B-UD-Q4_K_M.gguf
++MODEL=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M
++MODEL_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf
+ CONTEXT_SIZE=16384
+ PARALLEL=1
+ GPU_LAYERS=999
+diff --git a/.runpod/hub.json b/.runpod/hub.json
+index 1c895d0..50c8f97 100644
+--- a/.runpod/hub.json
++++ b/.runpod/hub.json
+@@ -1,6 +1,6 @@
+ {
+-  "title": "Qwen3.8-27B GGUF",
+-  "description": "Run Qwen3.8-27B UD-Q4_K_M with CUDA llama.cpp through OpenAI-compatible chat and completion requests.",
++  "title": "Qwen3.8-27B Uncensored GGUF",
++  "description": "Run JonathanColetti Qwen3.8-27B Uncensored Q4_K_M with CUDA llama.cpp through OpenAI-compatible chat and completion requests.",
+   "type": "serverless",
+   "category": "language",
+   "config": {
+@@ -39,11 +39,11 @@
+     "env": [
+       {
+         "key": "MODEL",
+-        "value": "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"
++        "value": "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M"
+       },
+       {
+         "key": "MODEL_FILE",
+-        "value": "Qwen3.8-27B-UD-Q4_K_M.gguf"
++        "value": "Qwen3.8-27B-Uncensored-Q4_K_M.gguf"
+       },
+       {
+         "key": "GPU_LAYERS",
+diff --git a/Dockerfile b/Dockerfile
+index 3dc0352..11c7c05 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -14,8 +14,8 @@ RUN apt-get update \
+ WORKDIR /worker
+ COPY handler.py /worker/handler.py
+ 
+-ENV MODEL="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M" \
+-    MODEL_FILE="Qwen3.8-27B-UD-Q4_K_M.gguf" \
++ENV MODEL="JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M" \
++    MODEL_FILE="Qwen3.8-27B-Uncensored-Q4_K_M.gguf" \
+     CONTEXT_SIZE="16384" \
+     PARALLEL="1" \
+     GPU_LAYERS="999" \
 diff --git a/README.md b/README.md
-index e4d2a33..95ba27b 100644
+index 95ba27b..f4ab2fe 100644
 --- a/README.md
 +++ b/README.md
-@@ -24,6 +24,8 @@ The Hub smoke test targets an RTX 4090, matching the working
- `qwen-image-2-1` configuration and avoiding the unavailable A40/A6000/L40 pool.
- Normal deployments keep `USE_MOCK_PIPELINE=0`, download Q4_K_M into the mounted
- Network Volume on first use, and reuse it on later workers with 16K context.
-+The worker registers with the RunPod queue only after llama.cpp reports healthy,
-+so cold-start download and model loading do not consume the job execution timer.
+@@ -1,8 +1,8 @@
+-# Qwen3.8-27B GGUF on RunPod Serverless
++# Qwen3.8-27B Uncensored GGUF on RunPod Serverless
  
- ## 1. Build and push
+-This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
+-`UD-Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs. The
+-handler preserves the OpenAI chat/completions response shape.
++This worker launches current CUDA `llama.cpp`, downloads JonathanColetti's
++16.8 GB `Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs.
++The handler preserves the OpenAI chat/completions response shape.
  
+ The Docker build pins the verified multi-architecture CUDA 12 image from the
+ current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
+@@ -37,7 +37,9 @@ IMAGE=ghcr.io/YOUR_USER/qwen38-runpod:latest ./deploy.sh
+ ## 2. RunPod endpoint settings
+ 
+ 1. Create a **25 GB or larger network volume** and mount it at `/runpod-volume`.
+-   The first worker caches the 16.5 GB model there; later cold starts reuse it.
++   The first worker caches the 16.8 GB model there; later cold starts reuse it.
++   When reusing a volume from versions through v1.0.12, delete its previous
++   `models--unsloth--Qwen3.8-27B-GGUF` cache or temporarily use at least 40 GB.
+ 2. Create a Serverless template from the pushed image. Container disk: **10 GB**.
+ 3. Create an endpoint with that template. Select **24 GB+ VRAM** GPUs (L4, RTX
+    4090, A5000, A6000, L40/L40S, A100). Start with workers `0–1`, idle timeout
 diff --git a/ROLLBACK.sh b/ROLLBACK.sh
-index 1be4c86..83b1849 100755
+index 83b1849..a7fa4c8 100755
 --- a/ROLLBACK.sh
 +++ b/ROLLBACK.sh
 @@ -2,6 +2,14 @@
  set -euo pipefail
  
  root="${1:-$(pwd)}"
-+if [[ "${2:-}" == "--worker-readiness-only" ]]; then
-+  for path in handler.py tests/test_handler.py README.md; do
-+    git -C "$root" show "v1.0.11:$path" > "$root/$path"
++if [[ "${2:-}" == "--model-switch-only" ]]; then
++  for path in handler.py Dockerfile .env.example .runpod/hub.json README.md tests/test_handler.py tests/test_runpod_hub.py; do
++    git -C "$root" show "v1.0.12:$path" > "$root/$path"
 +  done
-+  printf 'ROLLBACK_OK: restored v1.0.11 early worker registration\n'
++  printf 'ROLLBACK_OK: restored v1.0.12 Unsloth model source\n'
 +  exit 0
 +fi
 +
- if [[ "${2:-}" == "--test-gpu-4090-only" ]]; then
-   for path in .runpod/tests.json README.md tests/test_runpod_hub.py; do
-     git -C "$root" show "v1.0.10:$path" > "$root/$path"
+ if [[ "${2:-}" == "--worker-readiness-only" ]]; then
+   for path in handler.py tests/test_handler.py README.md; do
+     git -C "$root" show "v1.0.11:$path" > "$root/$path"
 diff --git a/VERIFICATION.txt b/VERIFICATION.txt
-index b676b35..fc62b90 100644
+index fc62b90..98a10ed 100644
 --- a/VERIFICATION.txt
 +++ b/VERIFICATION.txt
-@@ -1,34 +1,34 @@
--RunPod v1.0.11 Hub smoke-test GPU verification
-+RunPod v1.0.12 cold-start execution-timeout verification
+@@ -1,8 +1,8 @@
+-RunPod v1.0.12 cold-start execution-timeout verification
++RunPod v1.0.13 model-source switch verification
  
  Changed branch/field
--- Branch: RunPod Hub validation capacity selection
--- Fields: .runpod/tests.json config.gpuTypeId changes from NVIDIA A40 to NVIDIA GeForce RTX 4090; CUDA list remains 12.8-13.3
-+- Branch: normal Serverless worker initialization and queue registration
-+- Fields: handler.py moves wait_until_ready(STARTUP_TIMEOUT) from handler(job) to main() before runpod.serverless.start()
+-- Branch: normal Serverless worker initialization and queue registration
+-- Fields: handler.py moves wait_until_ready(STARTUP_TIMEOUT) from handler(job) to main() before runpod.serverless.start()
++- Branch: Hugging Face repository and Q4_K_M model artifact selection
++- Fields: MODEL changes to JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M; MODEL_FILE changes to Qwen3.8-27B-Uncensored-Q4_K_M.gguf
  
  Artifacts
--- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/.runpod/tests.json
-+- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/handler.py
- - DIFF_FILE: /Users/jk/PhpstormProjects/qwen-runpod/changes.diff
- - VERIFICATION: /Users/jk/PhpstormProjects/qwen-runpod/VERIFICATION.txt
+ - MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/handler.py
+@@ -11,24 +11,26 @@ Artifacts
  - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
  
  Hashes
--- Original .runpod/tests.json SHA-256: bceceaf7a2a55f6f7524db661de5be7d085e9666266aa677b6af3e34ccfcdd91
--- Modified .runpod/tests.json SHA-256: 7e92ba9c7b2fb0083056064c97d77ccb86376266a43717ba4df46485d8054043
-+- Original handler.py SHA-256: 523739c0adb1ac535962570b0bdb7319afdc34edb25ad928dc6899b3c3f691c7
-+- Modified handler.py SHA-256: 7666569e571896a5e790876e75877de28cc1c54e4f485f6c792bf7b05a155dfa
+-- Original handler.py SHA-256: 523739c0adb1ac535962570b0bdb7319afdc34edb25ad928dc6899b3c3f691c7
+-- Modified handler.py SHA-256: 7666569e571896a5e790876e75877de28cc1c54e4f485f6c792bf7b05a155dfa
++- Original handler.py SHA-256: 7666569e571896a5e790876e75877de28cc1c54e4f485f6c792bf7b05a155dfa
++- Modified handler.py SHA-256: 14bc0a2cceb3290f1e66848bd701f315ece3299c6fe95a1640e8c5c74061379b
++- Original Dockerfile SHA-256: 3b6f38c1bb91b26f5985c04c1f5125958f1ec9429efb80dceb23abbf4ef5de6a
++- Modified Dockerfile SHA-256: 3795902416af91889228e53ba77693691daecee395914728f0bdad8fa9cb3566
  
  BASELINE
  Command: python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
--Input: v1.0.10 A40 Hub smoke-test configuration
--Literal output/result: Ran 11 tests in 0.006s; OK; EXIT_STATUS=0
-+Input: v1.0.11 early queue registration with readiness wait inside each job
-+Literal output/result: Ran 11 tests in 0.008s; OK; EXIT_STATUS=0
+-Input: v1.0.11 early queue registration with readiness wait inside each job
+-Literal output/result: Ran 11 tests in 0.008s; OK; EXIT_STATUS=0
++Input: v1.0.12 Unsloth UD-Q4_K_M model configuration
++Literal output/result: Ran 12 tests in 0.012s; OK; EXIT_STATUS=0
  Exit status: 0
  
  MODIFIED
--Command: python3 -m json.tool .runpod/tests.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json; c=json.load(open(".runpod/tests.json")); print("MODIFIED_GPU="+c["config"]["gpuTypeId"]); print("MODIFIED_CUDA="+",".join(c["config"]["allowedCudaVersions"]))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
--Input: RTX 4090 Hub smoke-test configuration copied from qwen-image-2-1
--Literal output/result: Ran 11 tests in 0.007s; OK; MODIFIED_GPU=NVIDIA GeForce RTX 4090; MODIFIED_CUDA=12.8,12.9,13.0,13.1,13.2,13.3; EXIT_STATUS=0
-+Command: python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'from pathlib import Path; h=Path("handler.py").read_text(); body=h[h.index("def handler"):h.index("def main")]; main=h[h.index("server = subprocess.Popen"):]; print("MODIFIED_HANDLER_WAITS="+str("wait_until_ready" in body)); print("MODIFIED_MAIN_WAITS_BEFORE_WORKER="+str(main.index("wait_until_ready") < main.index("runpod.serverless.start")))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-+Input: v1.0.12 model readiness before normal RunPod worker registration
-+Literal output/result: Ran 12 tests in 0.013s; OK; MODIFIED_HANDLER_WAITS=False; MODIFIED_MAIN_WAITS_BEFORE_WORKER=True; EXIT_STATUS=0
+-Command: python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'from pathlib import Path; h=Path("handler.py").read_text(); body=h[h.index("def handler"):h.index("def main")]; main=h[h.index("server = subprocess.Popen"):]; print("MODIFIED_HANDLER_WAITS="+str("wait_until_ready" in body)); print("MODIFIED_MAIN_WAITS_BEFORE_WORKER="+str(main.index("wait_until_ready") < main.index("runpod.serverless.start")))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+-Input: v1.0.12 model readiness before normal RunPod worker registration
+-Literal output/result: Ran 12 tests in 0.013s; OK; MODIFIED_HANDLER_WAITS=False; MODIFIED_MAIN_WAITS_BEFORE_WORKER=True; EXIT_STATUS=0
++Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json,handler; h=json.load(open(".runpod/hub.json")); env={x["key"]:x.get("value") for x in h["config"]["env"]}; c=handler.build_server_command(); print("MODIFIED_MODEL="+env["MODEL"]); print("MODIFIED_FILE="+env["MODEL_FILE"]); print("MODIFIED_COMMAND_REPO="+c[c.index("--hf-repo")+1]); print("MODIFIED_COMMAND_FILE="+c[c.index("--hf-file")+1])'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
++Input: JonathanColetti Qwen3.8-27B Uncensored Q4_K_M configuration
++Literal output/result: Ran 12 tests in 0.005s; OK; MODIFIED_MODEL=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M; MODIFIED_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf; MODIFIED_COMMAND_REPO=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF; MODIFIED_COMMAND_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf; EXIT_STATUS=0
  Exit status: 0
  
  ROLLBACK
--Command: tmp=$(mktemp -d /tmp/qwen-runpod-v111-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --test-gpu-4090-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); c=json.loads((root/".runpod/tests.json").read_text()); print("ROLLBACK_GPU="+c["config"]["gpuTypeId"]); print("ROLLBACK_README_A40="+str("targets an A40" in (root/"README.md").read_text())); assert c["config"]["gpuTypeId"]=="NVIDIA A40"' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
--Input: separate copy of v1.0.11 workspace
--Literal output/result: ROLLBACK_OK: restored v1.0.10 A40 Hub test GPU; ROLLBACK_GPU=NVIDIA A40; ROLLBACK_README_A40=True; ROLLBACK_COPY=/tmp/qwen-runpod-v111-rollback.wMScon/project; EXIT_STATUS=0
-+Command: tmp=$(mktemp -d /tmp/qwen-runpod-v112-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --worker-readiness-only && python3 -c 'import sys; from pathlib import Path; root=Path(sys.argv[1]); h=(root/"handler.py").read_text(); body=h[h.index("def handler"):h.index("def main")]; main=h[h.index("server = subprocess.Popen"):]; print("ROLLBACK_HANDLER_WAITS="+str("wait_until_ready" in body)); print("ROLLBACK_MAIN_WAITS_BEFORE_WORKER="+str("wait_until_ready" in main and main.index("wait_until_ready") < main.index("runpod.serverless.start"))); assert "wait_until_ready" in body' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
-+Input: separate copy of v1.0.12 workspace
-+Literal output/result: ROLLBACK_OK: restored v1.0.11 early worker registration; ROLLBACK_HANDLER_WAITS=True; ROLLBACK_MAIN_WAITS_BEFORE_WORKER=False; ROLLBACK_COPY=/tmp/qwen-runpod-v112-rollback.QLKME4/project; EXIT_STATUS=0
+-Command: tmp=$(mktemp -d /tmp/qwen-runpod-v112-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --worker-readiness-only && python3 -c 'import sys; from pathlib import Path; root=Path(sys.argv[1]); h=(root/"handler.py").read_text(); body=h[h.index("def handler"):h.index("def main")]; main=h[h.index("server = subprocess.Popen"):]; print("ROLLBACK_HANDLER_WAITS="+str("wait_until_ready" in body)); print("ROLLBACK_MAIN_WAITS_BEFORE_WORKER="+str("wait_until_ready" in main and main.index("wait_until_ready") < main.index("runpod.serverless.start"))); assert "wait_until_ready" in body' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
+-Input: separate copy of v1.0.12 workspace
+-Literal output/result: ROLLBACK_OK: restored v1.0.11 early worker registration; ROLLBACK_HANDLER_WAITS=True; ROLLBACK_MAIN_WAITS_BEFORE_WORKER=False; ROLLBACK_COPY=/tmp/qwen-runpod-v112-rollback.QLKME4/project; EXIT_STATUS=0
++Command: tmp=$(mktemp -d /tmp/qwen-runpod-v113-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --model-switch-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); hub=json.loads((root/".runpod/hub.json").read_text()); env={x["key"]:x.get("value") for x in hub["config"]["env"]}; print("ROLLBACK_MODEL="+env["MODEL"]); print("ROLLBACK_FILE="+env["MODEL_FILE"]); assert env["MODEL"]=="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
++Input: separate copy of v1.0.13 workspace
++Literal output/result: ROLLBACK_OK: restored v1.0.12 Unsloth model source; ROLLBACK_MODEL=unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M; ROLLBACK_FILE=Qwen3.8-27B-UD-Q4_K_M.gguf; ROLLBACK_COPY=/tmp/qwen-runpod-v113-rollback.hgcC4b/project; EXIT_STATUS=0
  Exit status: 0
--Restored behavior/status: rollback copy targets A40 again; live MODIFIED_FILE targets RTX 4090 and retains the same CUDA compatibility list.
-+Restored behavior/status: rollback copy again claims the queue job before model readiness; live MODIFIED_FILE waits for llama.cpp health before accepting RunPod work.
+-Restored behavior/status: rollback copy again claims the queue job before model readiness; live MODIFIED_FILE waits for llama.cpp health before accepting RunPod work.
++Restored behavior/status: rollback copy selects the previous Unsloth artifact; live MODIFIED_FILE selects JonathanColetti's Q4_K_M artifact and retains Network Volume caching.
 diff --git a/handler.py b/handler.py
-index b2a77cb..6fb976e 100644
+index 6fb976e..2f51e40 100644
 --- a/handler.py
 +++ b/handler.py
-@@ -94,9 +94,6 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
+@@ -24,13 +24,13 @@ def mock_pipeline_enabled() -> bool:
+ 
+ def build_server_command() -> list[str]:
+     """Build the llama-server command entirely from environment settings."""
+-    model = os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M")
++    model = os.getenv("MODEL", "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M")
+     command = [
+         os.getenv("LLAMA_SERVER_BIN", "/app/llama-server"),
+         "--host", LLAMA_HOST,
+         "--port", str(LLAMA_PORT),
+         "--hf-repo", model.split(":", 1)[0],
+-        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
++        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-Uncensored-Q4_K_M.gguf"),
+         "--n-gpu-layers", os.getenv("GPU_LAYERS", "999"),
+         "--ctx-size", os.getenv("CONTEXT_SIZE", "16384"),
+         "--parallel", os.getenv("PARALLEL", "1"),
+@@ -94,7 +94,7 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
      if payload.get("stream"):
          raise ValueError("stream=true is unsupported by RunPod queue jobs; use stream=false")
  
--    # Register the RunPod worker before the large GGUF finishes downloading.
--    # The first accepted job waits here while llama.cpp becomes ready.
--    wait_until_ready(int(os.getenv("STARTUP_TIMEOUT", "1800")))
-     payload.setdefault("model", os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"))
+-    payload.setdefault("model", os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"))
++    payload.setdefault("model", os.getenv("MODEL", "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M"))
      return forward(route, payload)
  
-@@ -113,6 +110,10 @@ def main() -> None:
-     os.environ["HF_HOME"] = cache_dir
-     server = subprocess.Popen(build_server_command())
-     try:
-+        # Finish the cold start before registering the queue worker. Otherwise,
-+        # RunPod counts model loading against the job execution timeout and can
-+        # reject an already-generated result after the 600-second deadline.
-+        wait_until_ready(int(os.getenv("STARTUP_TIMEOUT", "1800")))
-         import runpod
  
-         runpod.serverless.start({"handler": handler})
 diff --git a/tests/test_handler.py b/tests/test_handler.py
-index a52e32f..ad656db 100644
+index ad656db..4b820fb 100644
 --- a/tests/test_handler.py
 +++ b/tests/test_handler.py
-@@ -19,7 +19,7 @@ class HandlerTests(unittest.TestCase):
-         self.assertEqual(route, "/v1/chat/completions")
-         self.assertIn("model", payload)
-         self.assertEqual(result["choices"][0]["message"]["content"], "ok")
--        self.ready.assert_called_once_with(1800)
-+        self.ready.assert_not_called()
+@@ -38,7 +38,8 @@ class HandlerTests(unittest.TestCase):
+     def test_server_command_uses_q4_model(self):
+         with patch.dict(os.environ, {}, clear=True):
+             command = handler.build_server_command()
+-        self.assertIn("Qwen3.8-27B-UD-Q4_K_M.gguf", command)
++        self.assertIn("JonathanColetti/Qwen3.8-27B-Uncensored-GGUF", command)
++        self.assertIn("Qwen3.8-27B-Uncensored-Q4_K_M.gguf", command)
+         self.assertIn("16384", command)
  
-     @patch("handler.forward")
-     def test_completion_route(self, forward):
-@@ -63,6 +63,22 @@ class HandlerTests(unittest.TestCase):
-         popen.assert_not_called()
-         fake_runpod.serverless.start.assert_called_once()
+     def test_mock_pipeline_returns_without_waiting_for_model(self):
+diff --git a/tests/test_runpod_hub.py b/tests/test_runpod_hub.py
+index 36c4003..dcf2b30 100644
+--- a/tests/test_runpod_hub.py
++++ b/tests/test_runpod_hub.py
+@@ -26,6 +26,8 @@ class RunpodHubConfigTests(unittest.TestCase):
+         self.assertEqual(config["config"]["runsOn"], "GPU")
+         self.assertGreaterEqual(config["config"]["containerDiskInGb"], 30)
+         env = {item["key"]: item.get("value") for item in config["config"]["env"]}
++        self.assertEqual(env["MODEL"], "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M")
++        self.assertEqual(env["MODEL_FILE"], "Qwen3.8-27B-Uncensored-Q4_K_M.gguf")
+         self.assertEqual(env["LLAMA_CACHE"], "/runpod-volume/huggingface/hub")
+         self.assertIn("ADA_24", config["config"]["gpuIds"])
  
-+    def test_normal_main_waits_for_model_before_registering_worker(self):
-+        fake_runpod = MagicMock()
-+        server = MagicMock()
-+        events = []
-+        fake_runpod.serverless.start.side_effect = lambda config: events.append("worker_registered")
-+        with (
-+            patch.dict(os.environ, {"USE_MOCK_PIPELINE": "0", "STARTUP_TIMEOUT": "1800"}, clear=True),
-+            patch.dict("sys.modules", {"runpod": fake_runpod}),
-+            patch("handler.os.makedirs"),
-+            patch("handler.subprocess.Popen", return_value=server),
-+            patch("handler.wait_until_ready", side_effect=lambda timeout: events.append(f"ready:{timeout}")),
-+        ):
-+            handler.main()
-+        self.assertEqual(events, ["ready:1800", "worker_registered"])
-+        server.terminate.assert_called_once_with()
-+
- 
- if __name__ == "__main__":
-     unittest.main()

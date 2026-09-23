@@ -38,7 +38,8 @@ class HandlerTests(unittest.TestCase):
     def test_server_command_uses_q4_model(self):
         with patch.dict(os.environ, {}, clear=True):
             command = handler.build_server_command()
-        self.assertIn("Qwen3.8-27B-UD-Q4_K_M.gguf", command)
+        self.assertIn("JonathanColetti/Qwen3.8-27B-Uncensored-GGUF", command)
+        self.assertIn("Qwen3.8-27B-Uncensored-Q4_K_M.gguf", command)
         self.assertIn("16384", command)
 
     def test_mock_pipeline_returns_without_waiting_for_model(self):

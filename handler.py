@@ -24,13 +24,13 @@ def mock_pipeline_enabled() -> bool:
 
 def build_server_command() -> list[str]:
     """Build the llama-server command entirely from environment settings."""
-    model = os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M")
+    model = os.getenv("MODEL", "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M")
     command = [
         os.getenv("LLAMA_SERVER_BIN", "/app/llama-server"),
         "--host", LLAMA_HOST,
         "--port", str(LLAMA_PORT),
         "--hf-repo", model.split(":", 1)[0],
-        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
+        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-Uncensored-Q4_K_M.gguf"),
         "--n-gpu-layers", os.getenv("GPU_LAYERS", "999"),
         "--ctx-size", os.getenv("CONTEXT_SIZE", "16384"),
         "--parallel", os.getenv("PARALLEL", "1"),
@@ -94,7 +94,7 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
     if payload.get("stream"):
         raise ValueError("stream=true is unsupported by RunPod queue jobs; use stream=false")
 
-    payload.setdefault("model", os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"))
+    payload.setdefault("model", os.getenv("MODEL", "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M"))
     return forward(route, payload)
 
 
