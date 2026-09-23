@@ -2,6 +2,19 @@
 set -euo pipefail
 
 root="${1:-$(pwd)}"
+if [[ "${2:-}" == "--test-pool-only" ]]; then
+  python3 - "$root/.runpod/tests.json" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text().replace('"gpuTypeId": "NVIDIA A40"', '"gpuTypeId": "NVIDIA GeForce RTX 4090"', 1)
+path.write_text(text)
+print("ROLLBACK_OK: restored RTX 4090 Hub test pool")
+PY
+  exit 0
+fi
+
 if [[ "${2:-}" == "--mock-smoke-only" ]]; then
   for path in handler.py .runpod/tests.json .runpod/hub.json; do
     git -C "$root" show "v1.0.5:$path" > "$root/$path"

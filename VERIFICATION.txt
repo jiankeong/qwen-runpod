@@ -1,37 +1,34 @@
-RunPod v1.0.6 model-independent Hub smoke-test verification
+RunPod v1.0.7 test-pool reservation workaround verification
 
 Changed branch/field
-- Branch: Hub validation boot path
-- Fields: USE_MOCK_PIPELINE=1 bypasses llama-server/model download; tests.json uses handler_boot_smoke, 30000 ms, RTX 4090, and explicit CUDA versions
-- Reference: https://github.com/jiankeong/qwen-image-2-1
+- Branch: Hub test pod provisioning before container startup
+- Field: .runpod/tests.json config.gpuTypeId changed from NVIDIA GeForce RTX 4090 to NVIDIA A40; 30000 ms mock-handler validation remains unchanged
 
 Artifacts
-- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/handler.py
+- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/.runpod/tests.json
 - DIFF_FILE: /Users/jk/PhpstormProjects/qwen-runpod/changes.diff
 - VERIFICATION: /Users/jk/PhpstormProjects/qwen-runpod/VERIFICATION.txt
 - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
 
 Hashes
-- Original handler.py SHA-256: ce1fddb194c972c9b1d065f633760588a01263a4e502f3f38f28ec8c2738bb5e
-- Modified handler.py SHA-256: 523739c0adb1ac535962570b0bdb7319afdc34edb25ad928dc6899b3c3f691c7
-- Original tests.json SHA-256: e365d35d93ad293d369495fb85145f53e04094a3545d489297d5adc19380da5a
-- Modified tests.json SHA-256: 7e92ba9c7b2fb0083056064c97d77ccb86376266a43717ba4df46485d8054043
+- Original tests.json SHA-256: 7e92ba9c7b2fb0083056064c97d77ccb86376266a43717ba4df46485d8054043
+- Modified tests.json SHA-256: bceceaf7a2a55f6f7524db661de5be7d085e9666266aa677b6af3e34ccfcdd91
 
 BASELINE
 Command: python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: v1.0.5 model-loading Hub test
-Literal output/result: Ran 8 tests in 0.003s; OK; EXIT_STATUS=0
+Input: v1.0.6 RTX 4090 mock-handler Hub test
+Literal output/result: Ran 11 tests in 0.004s; OK; EXIT_STATUS=0
 Exit status: 0
 
 MODIFIED
-Command: python3 -m json.tool .runpod/tests.json >/dev/null && python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && USE_MOCK_PIPELINE=1 python3 -c 'import handler; print(handler.handler({"input":{"healthcheck":True}}))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: model-independent handler boot configuration
-Literal output/result: Ran 11 tests in 0.004s; OK; {'status': 'ok', 'worker': 'qwen3.8-27b-gguf'}; EXIT_STATUS=0
+Command: python3 -m json.tool .runpod/tests.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json; d=json.load(open(".runpod/tests.json")); print("MODIFIED_GPU="+d["config"]["gpuTypeId"]); print("MODIFIED_TIMEOUT_MS="+str(d["tests"][0]["timeout"])); print("MODIFIED_MOCK="+d["config"]["env"][0]["value"])'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+Input: A40 mock-handler Hub test
+Literal output/result: Ran 11 tests in 0.005s; OK; MODIFIED_GPU=NVIDIA A40; MODIFIED_TIMEOUT_MS=30000; MODIFIED_MOCK=1; EXIT_STATUS=0
 Exit status: 0
 
 ROLLBACK
-Command: tmp=$(mktemp -d /tmp/qwen-runpod-v106-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --mock-smoke-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); h=(root/"handler.py").read_text(); t=json.loads((root/".runpod/tests.json").read_text()); print("ROLLBACK_HAS_MOCK="+str("USE_MOCK_PIPELINE" in h)); print("ROLLBACK_TEST="+t["tests"][0]["name"]); print("ROLLBACK_TIMEOUT="+str(t["tests"][0]["timeout"])); assert "USE_MOCK_PIPELINE" not in h' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
-Input: separate copy of v1.0.6 workspace
-Literal output/result: ROLLBACK_OK: restored v1.0.5 model-loading Hub test; ROLLBACK_HAS_MOCK=False; ROLLBACK_TEST=chat_completion_smoke_test; ROLLBACK_TIMEOUT=1800000; ROLLBACK_COPY=/tmp/qwen-runpod-v106-rollback.aqcb3x/project; EXIT_STATUS=0
+Command: tmp=$(mktemp -d /tmp/qwen-runpod-v107-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --test-pool-only && python3 -c 'import json,sys; from pathlib import Path; d=json.loads((Path(sys.argv[1])/".runpod/tests.json").read_text()); print("ROLLBACK_GPU="+d["config"]["gpuTypeId"]); assert d["config"]["gpuTypeId"]=="NVIDIA GeForce RTX 4090"' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
+Input: separate copy of A40-configured workspace
+Literal output/result: ROLLBACK_OK: restored RTX 4090 Hub test pool; ROLLBACK_GPU=NVIDIA GeForce RTX 4090; ROLLBACK_COPY=/tmp/qwen-runpod-v107-rollback.1iYObL/project; EXIT_STATUS=0
 Exit status: 0
-Restored behavior/status: rollback copy again downloads and loads a model during Hub validation; live MODIFIED_FILE boots the mock handler without llama-server.
+Restored behavior/status: rollback copy again selects the failing RTX 4090 reservation pool; live MODIFIED_FILE targets A40 and keeps the fast mock check.
