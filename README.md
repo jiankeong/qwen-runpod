@@ -26,6 +26,9 @@ Normal deployments keep `USE_MOCK_PIPELINE=0`, download Q4_K_M into the mounted
 Network Volume on first use, and reuse it on later workers with 16K context.
 The worker registers with the RunPod queue only after llama.cpp reports healthy,
 so cold-start download and model loading do not consume the job execution timer.
+Reasoning is disabled at server startup, automatic multimodal projector loading is
+disabled for this text endpoint, and chat requests receive a concise system prompt
+when the caller does not provide one.
 
 ## 1. Build and push
 
@@ -49,6 +52,9 @@ IMAGE=ghcr.io/YOUR_USER/qwen38-runpod:latest ./deploy.sh
 
 The image sets `LLAMA_CACHE=/runpod-volume/huggingface/hub`, matching the
 mounted volume explicitly so llama.cpp does not fall back to ephemeral storage.
+Set `SYSTEM_PROMPT` to replace the default concise-answer instruction. A caller's
+own system message always takes precedence. Chat requests default to 512 output
+tokens, `reasoning_budget=0`, and `reasoning_format=none` when omitted.
 
 `CONTEXT_SIZE=16384` is chosen so Q4 weights, KV cache, and runtime buffers fit a
 24 GB GPU. Use 32–48 GB VRAM before raising context or `PARALLEL`.

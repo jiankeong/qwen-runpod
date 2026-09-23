@@ -28,6 +28,9 @@ class RunpodHubConfigTests(unittest.TestCase):
         env = {item["key"]: item.get("value") for item in config["config"]["env"]}
         self.assertEqual(env["MODEL"], "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M")
         self.assertEqual(env["MODEL_FILE"], "Qwen3.8-27B-Uncensored-Q4_K_M.gguf")
+        self.assertEqual(env["REASONING"], "off")
+        self.assertEqual(env["REASONING_FORMAT"], "none")
+        self.assertIn("直接回答", env["SYSTEM_PROMPT"])
         self.assertEqual(env["LLAMA_CACHE"], "/runpod-volume/huggingface/hub")
         self.assertIn("ADA_24", config["config"]["gpuIds"])
 

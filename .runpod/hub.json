@@ -50,6 +50,18 @@
         "value": "999"
       },
       {
+        "key": "REASONING",
+        "value": "off"
+      },
+      {
+        "key": "REASONING_FORMAT",
+        "value": "none"
+      },
+      {
+        "key": "SYSTEM_PROMPT",
+        "value": "直接回答用户问题，只输出所需结果。不要展示分析或推理过程，不要添加开场白、总结、免责声明或重复内容。"
+      },
+      {
         "key": "CONTEXT_SIZE",
         "input": {
           "name": "Context size",

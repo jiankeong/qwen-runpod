@@ -18,6 +18,10 @@ class HandlerTests(unittest.TestCase):
         route, payload = forward.call_args.args
         self.assertEqual(route, "/v1/chat/completions")
         self.assertIn("model", payload)
+        self.assertEqual(payload["messages"][0]["role"], "system")
+        self.assertEqual(payload["reasoning_budget"], 0)
+        self.assertEqual(payload["reasoning_format"], "none")
+        self.assertEqual(payload["max_tokens"], 512)
         self.assertEqual(result["choices"][0]["message"]["content"], "ok")
         self.ready.assert_not_called()
 
@@ -40,7 +44,22 @@ class HandlerTests(unittest.TestCase):
             command = handler.build_server_command()
         self.assertIn("JonathanColetti/Qwen3.8-27B-Uncensored-GGUF", command)
         self.assertIn("Qwen3.8-27B-Uncensored-Q4_K_M.gguf", command)
+        self.assertEqual(command[command.index("--reasoning") + 1], "off")
+        self.assertEqual(command[command.index("--reasoning-format") + 1], "none")
+        self.assertIn("--no-mmproj-auto", command)
         self.assertIn("16384", command)
+
+    @patch("handler.forward")
+    def test_chat_preserves_caller_system_message_and_limits(self, forward):
+        forward.return_value = {"choices": [{"message": {"content": "ok"}}]}
+        messages = [
+            {"role": "system", "content": "只返回 JSON"},
+            {"role": "user", "content": "test"},
+        ]
+        handler.handler({"input": {"messages": messages, "max_tokens": 64}})
+        payload = forward.call_args.args[1]
+        self.assertEqual(payload["messages"], messages)
+        self.assertEqual(payload["max_tokens"], 64)
 
     def test_mock_pipeline_returns_without_waiting_for_model(self):
         with patch.dict(os.environ, {"USE_MOCK_PIPELINE": "1"}, clear=True):

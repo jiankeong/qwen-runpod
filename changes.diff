@@ -1,211 +1,247 @@
 diff --git a/.env.example b/.env.example
-index 1efdd8d..950ffd3 100644
+index 950ffd3..00c2f9e 100644
 --- a/.env.example
 +++ b/.env.example
-@@ -1,5 +1,5 @@
--MODEL=unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M
--MODEL_FILE=Qwen3.8-27B-UD-Q4_K_M.gguf
-+MODEL=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M
-+MODEL_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf
+@@ -3,6 +3,9 @@ MODEL_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf
  CONTEXT_SIZE=16384
  PARALLEL=1
  GPU_LAYERS=999
++REASONING=off
++REASONING_FORMAT=none
++SYSTEM_PROMPT=直接回答用户问题，只输出所需结果。不要展示分析或推理过程，不要添加开场白、总结、免责声明或重复内容。
+ CACHE_TYPE_K=q8_0
+ CACHE_TYPE_V=q8_0
+ STARTUP_TIMEOUT=1800
 diff --git a/.runpod/hub.json b/.runpod/hub.json
-index 1c895d0..50c8f97 100644
+index 50c8f97..8e00a45 100644
 --- a/.runpod/hub.json
 +++ b/.runpod/hub.json
-@@ -1,6 +1,6 @@
- {
--  "title": "Qwen3.8-27B GGUF",
--  "description": "Run Qwen3.8-27B UD-Q4_K_M with CUDA llama.cpp through OpenAI-compatible chat and completion requests.",
-+  "title": "Qwen3.8-27B Uncensored GGUF",
-+  "description": "Run JonathanColetti Qwen3.8-27B Uncensored Q4_K_M with CUDA llama.cpp through OpenAI-compatible chat and completion requests.",
-   "type": "serverless",
-   "category": "language",
-   "config": {
-@@ -39,11 +39,11 @@
-     "env": [
-       {
-         "key": "MODEL",
--        "value": "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"
-+        "value": "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M"
-       },
-       {
-         "key": "MODEL_FILE",
--        "value": "Qwen3.8-27B-UD-Q4_K_M.gguf"
-+        "value": "Qwen3.8-27B-Uncensored-Q4_K_M.gguf"
-       },
-       {
+@@ -49,6 +49,18 @@
          "key": "GPU_LAYERS",
+         "value": "999"
+       },
++      {
++        "key": "REASONING",
++        "value": "off"
++      },
++      {
++        "key": "REASONING_FORMAT",
++        "value": "none"
++      },
++      {
++        "key": "SYSTEM_PROMPT",
++        "value": "直接回答用户问题，只输出所需结果。不要展示分析或推理过程，不要添加开场白、总结、免责声明或重复内容。"
++      },
+       {
+         "key": "CONTEXT_SIZE",
+         "input": {
 diff --git a/Dockerfile b/Dockerfile
-index 3dc0352..11c7c05 100644
+index 11c7c05..ce1e235 100644
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -14,8 +14,8 @@ RUN apt-get update \
- WORKDIR /worker
- COPY handler.py /worker/handler.py
- 
--ENV MODEL="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M" \
--    MODEL_FILE="Qwen3.8-27B-UD-Q4_K_M.gguf" \
-+ENV MODEL="JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M" \
-+    MODEL_FILE="Qwen3.8-27B-Uncensored-Q4_K_M.gguf" \
+@@ -19,6 +19,8 @@ ENV MODEL="JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M" \
      CONTEXT_SIZE="16384" \
      PARALLEL="1" \
      GPU_LAYERS="999" \
++    REASONING="off" \
++    REASONING_FORMAT="none" \
+     HF_HOME="/runpod-volume/huggingface" \
+     LLAMA_CACHE="/runpod-volume/huggingface/hub"
+ 
 diff --git a/README.md b/README.md
-index 95ba27b..f4ab2fe 100644
+index f4ab2fe..eaa26cd 100644
 --- a/README.md
 +++ b/README.md
-@@ -1,8 +1,8 @@
--# Qwen3.8-27B GGUF on RunPod Serverless
-+# Qwen3.8-27B Uncensored GGUF on RunPod Serverless
+@@ -26,6 +26,9 @@ Normal deployments keep `USE_MOCK_PIPELINE=0`, download Q4_K_M into the mounted
+ Network Volume on first use, and reuse it on later workers with 16K context.
+ The worker registers with the RunPod queue only after llama.cpp reports healthy,
+ so cold-start download and model loading do not consume the job execution timer.
++Reasoning is disabled at server startup, automatic multimodal projector loading is
++disabled for this text endpoint, and chat requests receive a concise system prompt
++when the caller does not provide one.
  
--This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
--`UD-Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs. The
--handler preserves the OpenAI chat/completions response shape.
-+This worker launches current CUDA `llama.cpp`, downloads JonathanColetti's
-+16.8 GB `Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs.
-+The handler preserves the OpenAI chat/completions response shape.
+ ## 1. Build and push
  
- The Docker build pins the verified multi-architecture CUDA 12 image from the
- current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
-@@ -37,7 +37,9 @@ IMAGE=ghcr.io/YOUR_USER/qwen38-runpod:latest ./deploy.sh
- ## 2. RunPod endpoint settings
+@@ -49,6 +52,9 @@ IMAGE=ghcr.io/YOUR_USER/qwen38-runpod:latest ./deploy.sh
  
- 1. Create a **25 GB or larger network volume** and mount it at `/runpod-volume`.
--   The first worker caches the 16.5 GB model there; later cold starts reuse it.
-+   The first worker caches the 16.8 GB model there; later cold starts reuse it.
-+   When reusing a volume from versions through v1.0.12, delete its previous
-+   `models--unsloth--Qwen3.8-27B-GGUF` cache or temporarily use at least 40 GB.
- 2. Create a Serverless template from the pushed image. Container disk: **10 GB**.
- 3. Create an endpoint with that template. Select **24 GB+ VRAM** GPUs (L4, RTX
-    4090, A5000, A6000, L40/L40S, A100). Start with workers `0–1`, idle timeout
+ The image sets `LLAMA_CACHE=/runpod-volume/huggingface/hub`, matching the
+ mounted volume explicitly so llama.cpp does not fall back to ephemeral storage.
++Set `SYSTEM_PROMPT` to replace the default concise-answer instruction. A caller's
++own system message always takes precedence. Chat requests default to 512 output
++tokens, `reasoning_budget=0`, and `reasoning_format=none` when omitted.
+ 
+ `CONTEXT_SIZE=16384` is chosen so Q4 weights, KV cache, and runtime buffers fit a
+ 24 GB GPU. Use 32–48 GB VRAM before raising context or `PARALLEL`.
 diff --git a/ROLLBACK.sh b/ROLLBACK.sh
-index 83b1849..a7fa4c8 100755
+index a7fa4c8..178cca8 100755
 --- a/ROLLBACK.sh
 +++ b/ROLLBACK.sh
 @@ -2,6 +2,14 @@
  set -euo pipefail
  
  root="${1:-$(pwd)}"
-+if [[ "${2:-}" == "--model-switch-only" ]]; then
++if [[ "${2:-}" == "--concise-output-only" ]]; then
 +  for path in handler.py Dockerfile .env.example .runpod/hub.json README.md tests/test_handler.py tests/test_runpod_hub.py; do
-+    git -C "$root" show "v1.0.12:$path" > "$root/$path"
++    git -C "$root" show "v1.0.13:$path" > "$root/$path"
 +  done
-+  printf 'ROLLBACK_OK: restored v1.0.12 Unsloth model source\n'
++  printf 'ROLLBACK_OK: restored v1.0.13 automatic reasoning output\n'
 +  exit 0
 +fi
 +
- if [[ "${2:-}" == "--worker-readiness-only" ]]; then
-   for path in handler.py tests/test_handler.py README.md; do
-     git -C "$root" show "v1.0.11:$path" > "$root/$path"
+ if [[ "${2:-}" == "--model-switch-only" ]]; then
+   for path in handler.py Dockerfile .env.example .runpod/hub.json README.md tests/test_handler.py tests/test_runpod_hub.py; do
+     git -C "$root" show "v1.0.12:$path" > "$root/$path"
 diff --git a/VERIFICATION.txt b/VERIFICATION.txt
-index fc62b90..98a10ed 100644
+index 98a10ed..ce5f021 100644
 --- a/VERIFICATION.txt
 +++ b/VERIFICATION.txt
 @@ -1,8 +1,8 @@
--RunPod v1.0.12 cold-start execution-timeout verification
-+RunPod v1.0.13 model-source switch verification
+-RunPod v1.0.13 model-source switch verification
++RunPod v1.0.14 concise final-answer verification
  
  Changed branch/field
--- Branch: normal Serverless worker initialization and queue registration
--- Fields: handler.py moves wait_until_ready(STARTUP_TIMEOUT) from handler(job) to main() before runpod.serverless.start()
-+- Branch: Hugging Face repository and Q4_K_M model artifact selection
-+- Fields: MODEL changes to JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M; MODEL_FILE changes to Qwen3.8-27B-Uncensored-Q4_K_M.gguf
+-- Branch: Hugging Face repository and Q4_K_M model artifact selection
+-- Fields: MODEL changes to JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M; MODEL_FILE changes to Qwen3.8-27B-Uncensored-Q4_K_M.gguf
++- Branch: llama.cpp reasoning mode and chat request defaults
++- Fields: server starts with --reasoning off --reasoning-format none --no-mmproj-auto; chat requests default to reasoning_budget=0, reasoning_format=none, max_tokens=512, and a concise system prompt when absent
  
  Artifacts
  - MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/handler.py
-@@ -11,24 +11,26 @@ Artifacts
+@@ -11,26 +11,26 @@ Artifacts
  - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
  
  Hashes
--- Original handler.py SHA-256: 523739c0adb1ac535962570b0bdb7319afdc34edb25ad928dc6899b3c3f691c7
--- Modified handler.py SHA-256: 7666569e571896a5e790876e75877de28cc1c54e4f485f6c792bf7b05a155dfa
-+- Original handler.py SHA-256: 7666569e571896a5e790876e75877de28cc1c54e4f485f6c792bf7b05a155dfa
-+- Modified handler.py SHA-256: 14bc0a2cceb3290f1e66848bd701f315ece3299c6fe95a1640e8c5c74061379b
-+- Original Dockerfile SHA-256: 3b6f38c1bb91b26f5985c04c1f5125958f1ec9429efb80dceb23abbf4ef5de6a
-+- Modified Dockerfile SHA-256: 3795902416af91889228e53ba77693691daecee395914728f0bdad8fa9cb3566
+-- Original handler.py SHA-256: 7666569e571896a5e790876e75877de28cc1c54e4f485f6c792bf7b05a155dfa
+-- Modified handler.py SHA-256: 14bc0a2cceb3290f1e66848bd701f315ece3299c6fe95a1640e8c5c74061379b
+-- Original Dockerfile SHA-256: 3b6f38c1bb91b26f5985c04c1f5125958f1ec9429efb80dceb23abbf4ef5de6a
+-- Modified Dockerfile SHA-256: 3795902416af91889228e53ba77693691daecee395914728f0bdad8fa9cb3566
++- Original handler.py SHA-256: 14bc0a2cceb3290f1e66848bd701f315ece3299c6fe95a1640e8c5c74061379b
++- Modified handler.py SHA-256: 9f10c0fbdebdc7220a874fb49d633ab147f600052be8eaac28b5479c40d048ac
++- Original Dockerfile SHA-256: 3795902416af91889228e53ba77693691daecee395914728f0bdad8fa9cb3566
++- Modified Dockerfile SHA-256: ee1752e15d5e3e9d6f3a5d442f4e1f23e1bf0cda0334343f08c948042bdb2341
  
  BASELINE
  Command: python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
--Input: v1.0.11 early queue registration with readiness wait inside each job
--Literal output/result: Ran 11 tests in 0.008s; OK; EXIT_STATUS=0
-+Input: v1.0.12 Unsloth UD-Q4_K_M model configuration
-+Literal output/result: Ran 12 tests in 0.012s; OK; EXIT_STATUS=0
+-Input: v1.0.12 Unsloth UD-Q4_K_M model configuration
+-Literal output/result: Ran 12 tests in 0.012s; OK; EXIT_STATUS=0
++Input: v1.0.13 automatic reasoning and caller-only prompting
++Literal output/result: Ran 12 tests in 0.008s; OK; EXIT_STATUS=0
  Exit status: 0
  
  MODIFIED
--Command: python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'from pathlib import Path; h=Path("handler.py").read_text(); body=h[h.index("def handler"):h.index("def main")]; main=h[h.index("server = subprocess.Popen"):]; print("MODIFIED_HANDLER_WAITS="+str("wait_until_ready" in body)); print("MODIFIED_MAIN_WAITS_BEFORE_WORKER="+str(main.index("wait_until_ready") < main.index("runpod.serverless.start")))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
--Input: v1.0.12 model readiness before normal RunPod worker registration
--Literal output/result: Ran 12 tests in 0.013s; OK; MODIFIED_HANDLER_WAITS=False; MODIFIED_MAIN_WAITS_BEFORE_WORKER=True; EXIT_STATUS=0
-+Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json,handler; h=json.load(open(".runpod/hub.json")); env={x["key"]:x.get("value") for x in h["config"]["env"]}; c=handler.build_server_command(); print("MODIFIED_MODEL="+env["MODEL"]); print("MODIFIED_FILE="+env["MODEL_FILE"]); print("MODIFIED_COMMAND_REPO="+c[c.index("--hf-repo")+1]); print("MODIFIED_COMMAND_FILE="+c[c.index("--hf-file")+1])'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-+Input: JonathanColetti Qwen3.8-27B Uncensored Q4_K_M configuration
-+Literal output/result: Ran 12 tests in 0.005s; OK; MODIFIED_MODEL=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M; MODIFIED_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf; MODIFIED_COMMAND_REPO=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF; MODIFIED_COMMAND_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf; EXIT_STATUS=0
+-Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json,handler; h=json.load(open(".runpod/hub.json")); env={x["key"]:x.get("value") for x in h["config"]["env"]}; c=handler.build_server_command(); print("MODIFIED_MODEL="+env["MODEL"]); print("MODIFIED_FILE="+env["MODEL_FILE"]); print("MODIFIED_COMMAND_REPO="+c[c.index("--hf-repo")+1]); print("MODIFIED_COMMAND_FILE="+c[c.index("--hf-file")+1])'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+-Input: JonathanColetti Qwen3.8-27B Uncensored Q4_K_M configuration
+-Literal output/result: Ran 12 tests in 0.005s; OK; MODIFIED_MODEL=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M; MODIFIED_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf; MODIFIED_COMMAND_REPO=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF; MODIFIED_COMMAND_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf; EXIT_STATUS=0
++Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json,handler; h=json.load(open(".runpod/hub.json")); env={x["key"]:x.get("value") for x in h["config"]["env"]}; c=handler.build_server_command(); print("MODIFIED_REASONING="+c[c.index("--reasoning")+1]); print("MODIFIED_REASONING_FORMAT="+c[c.index("--reasoning-format")+1]); print("MODIFIED_MMPROJ_AUTO="+str("--no-mmproj-auto" not in c)); print("MODIFIED_HUB_REASONING="+env["REASONING"]); print("MODIFIED_SYSTEM_PROMPT="+env["SYSTEM_PROMPT"])'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
++Input: v1.0.14 reasoning-disabled concise chat configuration
++Literal output/result: Ran 13 tests in 0.018s; OK; MODIFIED_REASONING=off; MODIFIED_REASONING_FORMAT=none; MODIFIED_MMPROJ_AUTO=False; MODIFIED_HUB_REASONING=off; MODIFIED_SYSTEM_PROMPT=直接回答用户问题，只输出所需结果。不要展示分析或推理过程，不要添加开场白、总结、免责声明或重复内容。; EXIT_STATUS=0
  Exit status: 0
  
  ROLLBACK
--Command: tmp=$(mktemp -d /tmp/qwen-runpod-v112-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --worker-readiness-only && python3 -c 'import sys; from pathlib import Path; root=Path(sys.argv[1]); h=(root/"handler.py").read_text(); body=h[h.index("def handler"):h.index("def main")]; main=h[h.index("server = subprocess.Popen"):]; print("ROLLBACK_HANDLER_WAITS="+str("wait_until_ready" in body)); print("ROLLBACK_MAIN_WAITS_BEFORE_WORKER="+str("wait_until_ready" in main and main.index("wait_until_ready") < main.index("runpod.serverless.start"))); assert "wait_until_ready" in body' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
--Input: separate copy of v1.0.12 workspace
--Literal output/result: ROLLBACK_OK: restored v1.0.11 early worker registration; ROLLBACK_HANDLER_WAITS=True; ROLLBACK_MAIN_WAITS_BEFORE_WORKER=False; ROLLBACK_COPY=/tmp/qwen-runpod-v112-rollback.QLKME4/project; EXIT_STATUS=0
-+Command: tmp=$(mktemp -d /tmp/qwen-runpod-v113-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --model-switch-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); hub=json.loads((root/".runpod/hub.json").read_text()); env={x["key"]:x.get("value") for x in hub["config"]["env"]}; print("ROLLBACK_MODEL="+env["MODEL"]); print("ROLLBACK_FILE="+env["MODEL_FILE"]); assert env["MODEL"]=="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
-+Input: separate copy of v1.0.13 workspace
-+Literal output/result: ROLLBACK_OK: restored v1.0.12 Unsloth model source; ROLLBACK_MODEL=unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M; ROLLBACK_FILE=Qwen3.8-27B-UD-Q4_K_M.gguf; ROLLBACK_COPY=/tmp/qwen-runpod-v113-rollback.hgcC4b/project; EXIT_STATUS=0
+-Command: tmp=$(mktemp -d /tmp/qwen-runpod-v113-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --model-switch-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); hub=json.loads((root/".runpod/hub.json").read_text()); env={x["key"]:x.get("value") for x in hub["config"]["env"]}; print("ROLLBACK_MODEL="+env["MODEL"]); print("ROLLBACK_FILE="+env["MODEL_FILE"]); assert env["MODEL"]=="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
+-Input: separate copy of v1.0.13 workspace
+-Literal output/result: ROLLBACK_OK: restored v1.0.12 Unsloth model source; ROLLBACK_MODEL=unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M; ROLLBACK_FILE=Qwen3.8-27B-UD-Q4_K_M.gguf; ROLLBACK_COPY=/tmp/qwen-runpod-v113-rollback.hgcC4b/project; EXIT_STATUS=0
++Command: tmp=$(mktemp -d /tmp/qwen-runpod-v114-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --concise-output-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); h=(root/"handler.py").read_text(); hub=json.loads((root/".runpod/hub.json").read_text()); env={x["key"]:x.get("value") for x in hub["config"]["env"]}; print("ROLLBACK_REASONING_FLAG="+str("--reasoning" in h)); print("ROLLBACK_HUB_REASONING="+str("REASONING" in env)); print("ROLLBACK_DEFAULT_PROMPT="+str("DEFAULT_SYSTEM_PROMPT" in h)); assert "--reasoning" not in h and "REASONING" not in env' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
++Input: separate copy of v1.0.14 workspace
++Literal output/result: ROLLBACK_OK: restored v1.0.13 automatic reasoning output; ROLLBACK_REASONING_FLAG=False; ROLLBACK_HUB_REASONING=False; ROLLBACK_DEFAULT_PROMPT=False; ROLLBACK_COPY=/tmp/qwen-runpod-v114-rollback.C6IzHh/project; EXIT_STATUS=0
  Exit status: 0
--Restored behavior/status: rollback copy again claims the queue job before model readiness; live MODIFIED_FILE waits for llama.cpp health before accepting RunPod work.
-+Restored behavior/status: rollback copy selects the previous Unsloth artifact; live MODIFIED_FILE selects JonathanColetti's Q4_K_M artifact and retains Network Volume caching.
+-Restored behavior/status: rollback copy selects the previous Unsloth artifact; live MODIFIED_FILE selects JonathanColetti's Q4_K_M artifact and retains Network Volume caching.
++Restored behavior/status: rollback copy restores automatic reasoning and caller-only prompts; live MODIFIED_FILE disables reasoning and supplies concise defaults.
 diff --git a/handler.py b/handler.py
-index 6fb976e..2f51e40 100644
+index 2f51e40..eeeb89e 100644
 --- a/handler.py
 +++ b/handler.py
-@@ -24,13 +24,13 @@ def mock_pipeline_enabled() -> bool:
+@@ -15,6 +15,10 @@ LLAMA_HOST = os.getenv("LLAMA_HOST", "127.0.0.1")
+ LLAMA_PORT = int(os.getenv("LLAMA_PORT", "8080"))
+ LLAMA_BASE_URL = f"http://{LLAMA_HOST}:{LLAMA_PORT}"
+ ALLOWED_ROUTES = {"/v1/chat/completions", "/v1/completions"}
++DEFAULT_SYSTEM_PROMPT = (
++    "直接回答用户问题，只输出所需结果。不要展示分析或推理过程，"
++    "不要添加开场白、总结、免责声明或重复内容。"
++)
  
- def build_server_command() -> list[str]:
-     """Build the llama-server command entirely from environment settings."""
--    model = os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M")
-+    model = os.getenv("MODEL", "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M")
-     command = [
-         os.getenv("LLAMA_SERVER_BIN", "/app/llama-server"),
-         "--host", LLAMA_HOST,
-         "--port", str(LLAMA_PORT),
-         "--hf-repo", model.split(":", 1)[0],
--        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
-+        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-Uncensored-Q4_K_M.gguf"),
-         "--n-gpu-layers", os.getenv("GPU_LAYERS", "999"),
-         "--ctx-size", os.getenv("CONTEXT_SIZE", "16384"),
-         "--parallel", os.getenv("PARALLEL", "1"),
-@@ -94,7 +94,7 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
+ 
+ def mock_pipeline_enabled() -> bool:
+@@ -38,6 +42,9 @@ def build_server_command() -> list[str]:
+         "--cache-type-v", os.getenv("CACHE_TYPE_V", "q8_0"),
+         "--flash-attn", "on",
+         "--jinja",
++        "--reasoning", os.getenv("REASONING", "off"),
++        "--reasoning-format", os.getenv("REASONING_FORMAT", "none"),
++        "--no-mmproj-auto",
+     ]
+     if os.getenv("HF_TOKEN"):
+         command.extend(["--hf-token", os.environ["HF_TOKEN"]])
+@@ -94,6 +101,19 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
      if payload.get("stream"):
          raise ValueError("stream=true is unsupported by RunPod queue jobs; use stream=false")
  
--    payload.setdefault("model", os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"))
-+    payload.setdefault("model", os.getenv("MODEL", "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M"))
++    if route == "/v1/chat/completions":
++        messages = payload.get("messages")
++        if not isinstance(messages, list):
++            raise ValueError("input.messages must be a JSON array")
++        if not any(isinstance(message, dict) and message.get("role") == "system" for message in messages):
++            payload["messages"] = [
++                {"role": "system", "content": os.getenv("SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)},
++                *messages,
++            ]
++        payload.setdefault("reasoning_format", "none")
++        payload.setdefault("reasoning_budget", 0)
++        payload.setdefault("max_tokens", 512)
++
+     payload.setdefault("model", os.getenv("MODEL", "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M"))
      return forward(route, payload)
  
- 
 diff --git a/tests/test_handler.py b/tests/test_handler.py
-index ad656db..4b820fb 100644
+index 4b820fb..d811f53 100644
 --- a/tests/test_handler.py
 +++ b/tests/test_handler.py
-@@ -38,7 +38,8 @@ class HandlerTests(unittest.TestCase):
-     def test_server_command_uses_q4_model(self):
-         with patch.dict(os.environ, {}, clear=True):
+@@ -18,6 +18,10 @@ class HandlerTests(unittest.TestCase):
+         route, payload = forward.call_args.args
+         self.assertEqual(route, "/v1/chat/completions")
+         self.assertIn("model", payload)
++        self.assertEqual(payload["messages"][0]["role"], "system")
++        self.assertEqual(payload["reasoning_budget"], 0)
++        self.assertEqual(payload["reasoning_format"], "none")
++        self.assertEqual(payload["max_tokens"], 512)
+         self.assertEqual(result["choices"][0]["message"]["content"], "ok")
+         self.ready.assert_not_called()
+ 
+@@ -40,8 +44,23 @@ class HandlerTests(unittest.TestCase):
              command = handler.build_server_command()
--        self.assertIn("Qwen3.8-27B-UD-Q4_K_M.gguf", command)
-+        self.assertIn("JonathanColetti/Qwen3.8-27B-Uncensored-GGUF", command)
-+        self.assertIn("Qwen3.8-27B-Uncensored-Q4_K_M.gguf", command)
+         self.assertIn("JonathanColetti/Qwen3.8-27B-Uncensored-GGUF", command)
+         self.assertIn("Qwen3.8-27B-Uncensored-Q4_K_M.gguf", command)
++        self.assertEqual(command[command.index("--reasoning") + 1], "off")
++        self.assertEqual(command[command.index("--reasoning-format") + 1], "none")
++        self.assertIn("--no-mmproj-auto", command)
          self.assertIn("16384", command)
  
++    @patch("handler.forward")
++    def test_chat_preserves_caller_system_message_and_limits(self, forward):
++        forward.return_value = {"choices": [{"message": {"content": "ok"}}]}
++        messages = [
++            {"role": "system", "content": "只返回 JSON"},
++            {"role": "user", "content": "test"},
++        ]
++        handler.handler({"input": {"messages": messages, "max_tokens": 64}})
++        payload = forward.call_args.args[1]
++        self.assertEqual(payload["messages"], messages)
++        self.assertEqual(payload["max_tokens"], 64)
++
      def test_mock_pipeline_returns_without_waiting_for_model(self):
+         with patch.dict(os.environ, {"USE_MOCK_PIPELINE": "1"}, clear=True):
+             result = handler.handler({"input": {"healthcheck": True}})
 diff --git a/tests/test_runpod_hub.py b/tests/test_runpod_hub.py
-index 36c4003..dcf2b30 100644
+index dcf2b30..6fdbb0e 100644
 --- a/tests/test_runpod_hub.py
 +++ b/tests/test_runpod_hub.py
-@@ -26,6 +26,8 @@ class RunpodHubConfigTests(unittest.TestCase):
-         self.assertEqual(config["config"]["runsOn"], "GPU")
-         self.assertGreaterEqual(config["config"]["containerDiskInGb"], 30)
+@@ -28,6 +28,9 @@ class RunpodHubConfigTests(unittest.TestCase):
          env = {item["key"]: item.get("value") for item in config["config"]["env"]}
-+        self.assertEqual(env["MODEL"], "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M")
-+        self.assertEqual(env["MODEL_FILE"], "Qwen3.8-27B-Uncensored-Q4_K_M.gguf")
+         self.assertEqual(env["MODEL"], "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M")
+         self.assertEqual(env["MODEL_FILE"], "Qwen3.8-27B-Uncensored-Q4_K_M.gguf")
++        self.assertEqual(env["REASONING"], "off")
++        self.assertEqual(env["REASONING_FORMAT"], "none")
++        self.assertIn("直接回答", env["SYSTEM_PROMPT"])
          self.assertEqual(env["LLAMA_CACHE"], "/runpod-volume/huggingface/hub")
          self.assertIn("ADA_24", config["config"]["gpuIds"])
  

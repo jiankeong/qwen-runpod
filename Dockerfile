@@ -19,6 +19,8 @@ ENV MODEL="JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M" \
     CONTEXT_SIZE="16384" \
     PARALLEL="1" \
     GPU_LAYERS="999" \
+    REASONING="off" \
+    REASONING_FORMAT="none" \
     HF_HOME="/runpod-volume/huggingface" \
     LLAMA_CACHE="/runpod-volume/huggingface/hub"
 

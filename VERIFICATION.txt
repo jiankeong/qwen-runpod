@@ -1,8 +1,8 @@
-RunPod v1.0.13 model-source switch verification
+RunPod v1.0.14 concise final-answer verification
 
 Changed branch/field
-- Branch: Hugging Face repository and Q4_K_M model artifact selection
-- Fields: MODEL changes to JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M; MODEL_FILE changes to Qwen3.8-27B-Uncensored-Q4_K_M.gguf
+- Branch: llama.cpp reasoning mode and chat request defaults
+- Fields: server starts with --reasoning off --reasoning-format none --no-mmproj-auto; chat requests default to reasoning_budget=0, reasoning_format=none, max_tokens=512, and a concise system prompt when absent
 
 Artifacts
 - MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/handler.py
@@ -11,26 +11,26 @@ Artifacts
 - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
 
 Hashes
-- Original handler.py SHA-256: 7666569e571896a5e790876e75877de28cc1c54e4f485f6c792bf7b05a155dfa
-- Modified handler.py SHA-256: 14bc0a2cceb3290f1e66848bd701f315ece3299c6fe95a1640e8c5c74061379b
-- Original Dockerfile SHA-256: 3b6f38c1bb91b26f5985c04c1f5125958f1ec9429efb80dceb23abbf4ef5de6a
-- Modified Dockerfile SHA-256: 3795902416af91889228e53ba77693691daecee395914728f0bdad8fa9cb3566
+- Original handler.py SHA-256: 14bc0a2cceb3290f1e66848bd701f315ece3299c6fe95a1640e8c5c74061379b
+- Modified handler.py SHA-256: 9f10c0fbdebdc7220a874fb49d633ab147f600052be8eaac28b5479c40d048ac
+- Original Dockerfile SHA-256: 3795902416af91889228e53ba77693691daecee395914728f0bdad8fa9cb3566
+- Modified Dockerfile SHA-256: ee1752e15d5e3e9d6f3a5d442f4e1f23e1bf0cda0334343f08c948042bdb2341
 
 BASELINE
 Command: python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: v1.0.12 Unsloth UD-Q4_K_M model configuration
-Literal output/result: Ran 12 tests in 0.012s; OK; EXIT_STATUS=0
+Input: v1.0.13 automatic reasoning and caller-only prompting
+Literal output/result: Ran 12 tests in 0.008s; OK; EXIT_STATUS=0
 Exit status: 0
 
 MODIFIED
-Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json,handler; h=json.load(open(".runpod/hub.json")); env={x["key"]:x.get("value") for x in h["config"]["env"]}; c=handler.build_server_command(); print("MODIFIED_MODEL="+env["MODEL"]); print("MODIFIED_FILE="+env["MODEL_FILE"]); print("MODIFIED_COMMAND_REPO="+c[c.index("--hf-repo")+1]); print("MODIFIED_COMMAND_FILE="+c[c.index("--hf-file")+1])'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: JonathanColetti Qwen3.8-27B Uncensored Q4_K_M configuration
-Literal output/result: Ran 12 tests in 0.005s; OK; MODIFIED_MODEL=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M; MODIFIED_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf; MODIFIED_COMMAND_REPO=JonathanColetti/Qwen3.8-27B-Uncensored-GGUF; MODIFIED_COMMAND_FILE=Qwen3.8-27B-Uncensored-Q4_K_M.gguf; EXIT_STATUS=0
+Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json,handler; h=json.load(open(".runpod/hub.json")); env={x["key"]:x.get("value") for x in h["config"]["env"]}; c=handler.build_server_command(); print("MODIFIED_REASONING="+c[c.index("--reasoning")+1]); print("MODIFIED_REASONING_FORMAT="+c[c.index("--reasoning-format")+1]); print("MODIFIED_MMPROJ_AUTO="+str("--no-mmproj-auto" not in c)); print("MODIFIED_HUB_REASONING="+env["REASONING"]); print("MODIFIED_SYSTEM_PROMPT="+env["SYSTEM_PROMPT"])'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+Input: v1.0.14 reasoning-disabled concise chat configuration
+Literal output/result: Ran 13 tests in 0.018s; OK; MODIFIED_REASONING=off; MODIFIED_REASONING_FORMAT=none; MODIFIED_MMPROJ_AUTO=False; MODIFIED_HUB_REASONING=off; MODIFIED_SYSTEM_PROMPT=直接回答用户问题，只输出所需结果。不要展示分析或推理过程，不要添加开场白、总结、免责声明或重复内容。; EXIT_STATUS=0
 Exit status: 0
 
 ROLLBACK
-Command: tmp=$(mktemp -d /tmp/qwen-runpod-v113-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --model-switch-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); hub=json.loads((root/".runpod/hub.json").read_text()); env={x["key"]:x.get("value") for x in hub["config"]["env"]}; print("ROLLBACK_MODEL="+env["MODEL"]); print("ROLLBACK_FILE="+env["MODEL_FILE"]); assert env["MODEL"]=="unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
-Input: separate copy of v1.0.13 workspace
-Literal output/result: ROLLBACK_OK: restored v1.0.12 Unsloth model source; ROLLBACK_MODEL=unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M; ROLLBACK_FILE=Qwen3.8-27B-UD-Q4_K_M.gguf; ROLLBACK_COPY=/tmp/qwen-runpod-v113-rollback.hgcC4b/project; EXIT_STATUS=0
+Command: tmp=$(mktemp -d /tmp/qwen-runpod-v114-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --concise-output-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); h=(root/"handler.py").read_text(); hub=json.loads((root/".runpod/hub.json").read_text()); env={x["key"]:x.get("value") for x in hub["config"]["env"]}; print("ROLLBACK_REASONING_FLAG="+str("--reasoning" in h)); print("ROLLBACK_HUB_REASONING="+str("REASONING" in env)); print("ROLLBACK_DEFAULT_PROMPT="+str("DEFAULT_SYSTEM_PROMPT" in h)); assert "--reasoning" not in h and "REASONING" not in env' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
+Input: separate copy of v1.0.14 workspace
+Literal output/result: ROLLBACK_OK: restored v1.0.13 automatic reasoning output; ROLLBACK_REASONING_FLAG=False; ROLLBACK_HUB_REASONING=False; ROLLBACK_DEFAULT_PROMPT=False; ROLLBACK_COPY=/tmp/qwen-runpod-v114-rollback.C6IzHh/project; EXIT_STATUS=0
 Exit status: 0
-Restored behavior/status: rollback copy selects the previous Unsloth artifact; live MODIFIED_FILE selects JonathanColetti's Q4_K_M artifact and retains Network Volume caching.
+Restored behavior/status: rollback copy restores automatic reasoning and caller-only prompts; live MODIFIED_FILE disables reasoning and supplies concise defaults.

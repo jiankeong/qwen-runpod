@@ -15,6 +15,10 @@ LLAMA_HOST = os.getenv("LLAMA_HOST", "127.0.0.1")
 LLAMA_PORT = int(os.getenv("LLAMA_PORT", "8080"))
 LLAMA_BASE_URL = f"http://{LLAMA_HOST}:{LLAMA_PORT}"
 ALLOWED_ROUTES = {"/v1/chat/completions", "/v1/completions"}
+DEFAULT_SYSTEM_PROMPT = (
+    "直接回答用户问题，只输出所需结果。不要展示分析或推理过程，"
+    "不要添加开场白、总结、免责声明或重复内容。"
+)
 
 
 def mock_pipeline_enabled() -> bool:
@@ -38,6 +42,9 @@ def build_server_command() -> list[str]:
         "--cache-type-v", os.getenv("CACHE_TYPE_V", "q8_0"),
         "--flash-attn", "on",
         "--jinja",
+        "--reasoning", os.getenv("REASONING", "off"),
+        "--reasoning-format", os.getenv("REASONING_FORMAT", "none"),
+        "--no-mmproj-auto",
     ]
     if os.getenv("HF_TOKEN"):
         command.extend(["--hf-token", os.environ["HF_TOKEN"]])
@@ -93,6 +100,19 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"route must be one of {sorted(ALLOWED_ROUTES)}")
     if payload.get("stream"):
         raise ValueError("stream=true is unsupported by RunPod queue jobs; use stream=false")
+
+    if route == "/v1/chat/completions":
+        messages = payload.get("messages")
+        if not isinstance(messages, list):
+            raise ValueError("input.messages must be a JSON array")
+        if not any(isinstance(message, dict) and message.get("role") == "system" for message in messages):
+            payload["messages"] = [
+                {"role": "system", "content": os.getenv("SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)},
+                *messages,
+            ]
+        payload.setdefault("reasoning_format", "none")
+        payload.setdefault("reasoning_budget", 0)
+        payload.setdefault("max_tokens", 512)
 
     payload.setdefault("model", os.getenv("MODEL", "JonathanColetti/Qwen3.8-27B-Uncensored-GGUF:Q4_K_M"))
     return forward(route, payload)
