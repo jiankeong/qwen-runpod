@@ -1,31 +1,32 @@
-llama.cpp base-image build fix verification
+RunPod Hub test-GPU scheduling fix verification
 
 Changed branch/field
-- Branch: Docker build base-image resolution before dependency installation
-- Field: Dockerfile FROM changed from ghcr.io/ggerganov/llama.cpp:server-cuda to the verified ggml-org server-cuda OCI index digest
+- Branch: Hub smoke-test worker scheduling before model startup
+- Field: .runpod/tests.json config.gpuTypeId changed from NVIDIA GeForce RTX 4090 to NVIDIA A40; timeout remains 1800000 ms
 
 Artifacts
-- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/Dockerfile
+- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/.runpod/tests.json
 - DIFF_FILE: /Users/jk/PhpstormProjects/qwen-runpod/changes.diff
 - VERIFICATION: /Users/jk/PhpstormProjects/qwen-runpod/VERIFICATION.txt
 - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
 
 Hashes
-- Original Dockerfile SHA-256: 89773185a019f93b77d0cc2aa4579b7903c223dc7d6baf107e725c4440b0f774
-- Modified Dockerfile SHA-256: 0f79812cb0e43b8dd3333da3b8abdd56f4a9c6db0ec6c2e3c23ea5741c66c00b
-- changes.diff SHA-256: f5ef6b9f2bbd159f94e695c4076f99698c41f53cc88d871c5f6460208067448f
+- Original tests.json SHA-256: f7152d0f2b7971d11d43c164a784cdbc8b871f83d278492d0099a23bfdd6297a
+- Modified tests.json SHA-256: 17bfc7636ae240d64e372af9943500d4597a3ba032513d8bbdd81721e2542ddc
+- changes.diff SHA-256: 88532ca69eee22dc149a67a117acade2cdac4edef4a2746874627ab323f1fb9d
 
 BASELINE
-Command: token=$(curl -sS 'https://ghcr.io/token?scope=repository:ggerganov/llama.cpp:pull' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])') && curl -sS -o /dev/null -w 'BASELINE_IMAGE_HTTP=%{http_code}\n' -H "Authorization: Bearer $token" -H 'Accept: application/vnd.oci.image.index.v1+json' 'https://ghcr.io/v2/ggerganov/llama.cpp/manifests/server-cuda'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: original ggerganov/server-cuda manifest reference from Dockerfile
+Command: python3 -c 'import json; d=json.load(open(".runpod/tests.json")); print("BASELINE_GPU="+d["config"]["gpuTypeId"]); print("BASELINE_TIMEOUT_MS="+str(d["tests"][0]["timeout"]))'; printf 'EXIT_STATUS=%s\n' "$?"
+Input: v1.0.2 Hub smoke-test configuration
 Literal output/result:
-BASELINE_IMAGE_HTTP=404
+BASELINE_GPU=NVIDIA GeForce RTX 4090
+BASELINE_TIMEOUT_MS=1800000
 EXIT_STATUS=0
 Exit status: 0
 
 MODIFIED
-Command: python3 -m unittest discover -s tests -v 2>&1 && bash -n ROLLBACK.sh && token=$(curl -sS 'https://ghcr.io/token?scope=repository:ggml-org/llama.cpp:pull' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])') && curl -sS -o /tmp/llama-manifest.json -w 'MODIFIED_IMAGE_HTTP=%{http_code}\n' -H "Authorization: Bearer $token" -H 'Accept: application/vnd.oci.image.index.v1+json' 'https://ghcr.io/v2/ggml-org/llama.cpp/manifests/server-cuda'; rc=$?; python3 -c 'import json; d=json.load(open("/tmp/llama-manifest.json")); print("PLATFORMS="+",".join(m["platform"]["os"]+"/"+m["platform"]["architecture"] for m in d["manifests"]))'; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: modified Dockerfile and official ggml-org/server-cuda manifest reference
+Command: python3 -m json.tool .runpod/tests.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json; d=json.load(open(".runpod/tests.json")); print("MODIFIED_GPU="+d["config"]["gpuTypeId"]); print("MODIFIED_VRAM_GB=48")'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+Input: modified .runpod/tests.json and local test suite
 Literal output/result:
 test_chat_route_and_defaults (test_handler.HandlerTests.test_chat_route_and_defaults) ... ok
 test_completion_route (test_handler.HandlerTests.test_completion_route) ... ok
@@ -40,17 +41,17 @@ test_hub_smoke_test_matches_handler_input (test_runpod_hub.RunpodHubConfigTests.
 Ran 8 tests in 0.002s
 
 OK
-MODIFIED_IMAGE_HTTP=200
-PLATFORMS=linux/amd64,linux/arm64
+MODIFIED_GPU=NVIDIA A40
+MODIFIED_VRAM_GB=48
 EXIT_STATUS=0
 Exit status: 0
 
 ROLLBACK
-Command: tmp=$(mktemp -d /tmp/qwen-runpod-image-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --image-fix-only && python3 -c 'from pathlib import Path; import sys; line=(Path(sys.argv[1])/"Dockerfile").read_text().splitlines()[0]; print("ROLLBACK_RESTORED_OLD_IMAGE" if line == "FROM ghcr.io/ggerganov/llama.cpp:server-cuda" else "ROLLBACK_FAILED")' "$tmp/project"; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: separate copy of the fixed workspace
+Command: tmp=$(mktemp -d /tmp/qwen-runpod-gpu-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --test-gpu-only && python3 -c 'import json,sys; from pathlib import Path; d=json.loads((Path(sys.argv[1])/".runpod/tests.json").read_text()); print("ROLLBACK_RESTORED_GPU="+d["config"]["gpuTypeId"])' "$tmp/project"; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+Input: separate copy of the A40-configured workspace
 Literal output/result:
-ROLLBACK_OK: restored previous llama.cpp image reference
-ROLLBACK_RESTORED_OLD_IMAGE
+ROLLBACK_OK: restored previous Hub test GPU
+ROLLBACK_RESTORED_GPU=NVIDIA GeForce RTX 4090
 EXIT_STATUS=0
 Exit status: 0
-Restored behavior/status: the rollback copy again references the original image and therefore reproduces its 404 resolution state; the live MODIFIED_FILE remains fixed.
+Restored behavior/status: the rollback copy again targets the previous RTX 4090 test worker; the live MODIFIED_FILE remains set to NVIDIA A40.

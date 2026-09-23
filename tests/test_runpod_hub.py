@@ -29,6 +29,7 @@ class RunpodHubConfigTests(unittest.TestCase):
         self.assertIn("messages", smoke_test["input"])
         self.assertFalse(smoke_test["input"]["stream"])
         self.assertGreaterEqual(smoke_test["timeout"], 1_800_000)
+        self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA A40")
         self.assertEqual(config["config"]["gpuCount"], 1)
 
 

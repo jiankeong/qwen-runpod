@@ -1,77 +1,63 @@
-diff --git a/Dockerfile b/Dockerfile
-index 371acc6..7b66e8a 100644
---- a/Dockerfile
-+++ b/Dockerfile
-@@ -1,4 +1,4 @@
--FROM ghcr.io/ggerganov/llama.cpp:server-cuda
-+FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f
- 
- USER root
- RUN apt-get update \
+diff --git a/.runpod/tests.json b/.runpod/tests.json
+index 0f6d902..24c7efb 100644
+--- a/.runpod/tests.json
++++ b/.runpod/tests.json
+@@ -17,7 +17,7 @@
+     }
+   ],
+   "config": {
+-    "gpuTypeId": "NVIDIA GeForce RTX 4090",
++    "gpuTypeId": "NVIDIA A40",
+     "gpuCount": 1,
+     "env": [
+       {
 diff --git a/README.md b/README.md
-index d96fba7..fe1aef8 100644
+index fe1aef8..f0b8112 100644
 --- a/README.md
 +++ b/README.md
-@@ -4,6 +4,9 @@ This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
- `UD-Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs. The
- handler preserves the OpenAI chat/completions response shape.
- 
-+The Docker build pins the verified multi-architecture CUDA 12 image from the
-+current `ggml-org/llama.cpp` GitHub Container Registry namespace.
-+
- ## RunPod Hub
- 
+@@ -12,7 +12,8 @@ current `ggml-org/llama.cpp` GitHub Container Registry namespace.
  The repository includes `.runpod/hub.json` and `.runpod/tests.json`, so a GitHub
+ release can be indexed and tested by RunPod Hub. The Hub listing uses the
+ **Language** category, one GPU with at least 24 GB VRAM, a 30 GB container disk,
+-and a non-streaming chat-completion smoke test.
++and a non-streaming chat-completion smoke test on the datacenter-oriented 48 GB
++NVIDIA A40 pool.
+ 
+ ## 1. Build and push
+ 
 diff --git a/ROLLBACK.sh b/ROLLBACK.sh
-index 744f06e..f9053b8 100755
+index f9053b8..5f1bfca 100755
 --- a/ROLLBACK.sh
 +++ b/ROLLBACK.sh
-@@ -2,6 +2,24 @@
+@@ -2,6 +2,19 @@
  set -euo pipefail
  
  root="${1:-$(pwd)}"
-+if [[ "${2:-}" == "--image-fix-only" ]]; then
-+  python3 - "$root/Dockerfile" <<'PY'
++if [[ "${2:-}" == "--test-gpu-only" ]]; then
++  python3 - "$root/.runpod/tests.json" <<'PY'
 +from pathlib import Path
 +import sys
 +
 +path = Path(sys.argv[1])
-+text = path.read_text()
-+text = text.replace(
-+    "ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f",
-+    "ghcr.io/ggerganov/llama.cpp:server-cuda",
-+    1,
-+)
++text = path.read_text().replace('"gpuTypeId": "NVIDIA A40"', '"gpuTypeId": "NVIDIA GeForce RTX 4090"', 1)
 +path.write_text(text)
-+print("ROLLBACK_OK: restored previous llama.cpp image reference")
++print("ROLLBACK_OK: restored previous Hub test GPU")
 +PY
 +  exit 0
 +fi
 +
- for path in handler.py Dockerfile requirements.txt .dockerignore .env.example deploy.sh README.md changes.diff VERIFICATION.txt; do
-   rm -f "$root/$path"
- done
+ if [[ "${2:-}" == "--image-fix-only" ]]; then
+   python3 - "$root/Dockerfile" <<'PY'
+ from pathlib import Path
 diff --git a/tests/test_runpod_hub.py b/tests/test_runpod_hub.py
-index 65a531d..09e4ac4 100644
+index 09e4ac4..e4e3b4a 100644
 --- a/tests/test_runpod_hub.py
 +++ b/tests/test_runpod_hub.py
-@@ -1,4 +1,5 @@
- import json
-+import re
- import unittest
- from pathlib import Path
+@@ -29,6 +29,7 @@ class RunpodHubConfigTests(unittest.TestCase):
+         self.assertIn("messages", smoke_test["input"])
+         self.assertFalse(smoke_test["input"]["stream"])
+         self.assertGreaterEqual(smoke_test["timeout"], 1_800_000)
++        self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA A40")
+         self.assertEqual(config["config"]["gpuCount"], 1)
  
-@@ -7,6 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
  
- 
- class RunpodHubConfigTests(unittest.TestCase):
-+    def test_dockerfile_uses_resolvable_official_llama_image(self):
-+        dockerfile = (ROOT / "Dockerfile").read_text()
-+        first_line = dockerfile.splitlines()[0]
-+        self.assertTrue(first_line.startswith("FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:"))
-+        self.assertRegex(first_line, re.compile(r"@sha256:[0-9a-f]{64}$"))
-+        self.assertNotIn("ghcr.io/ggerganov/", dockerfile)
-+
-     def test_hub_configuration(self):
-         config = json.loads((ROOT / ".runpod" / "hub.json").read_text())
-         self.assertEqual(config["type"], "serverless")

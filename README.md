@@ -12,7 +12,8 @@ current `ggml-org/llama.cpp` GitHub Container Registry namespace.
 The repository includes `.runpod/hub.json` and `.runpod/tests.json`, so a GitHub
 release can be indexed and tested by RunPod Hub. The Hub listing uses the
 **Language** category, one GPU with at least 24 GB VRAM, a 30 GB container disk,
-and a non-streaming chat-completion smoke test.
+and a non-streaming chat-completion smoke test on the datacenter-oriented 48 GB
+NVIDIA A40 pool.
 
 ## 1. Build and push
 
