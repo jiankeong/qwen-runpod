@@ -2,6 +2,24 @@
 set -euo pipefail
 
 root="${1:-$(pwd)}"
+if [[ "${2:-}" == "--image-fix-only" ]]; then
+  python3 - "$root/Dockerfile" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+text = text.replace(
+    "ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f",
+    "ghcr.io/ggerganov/llama.cpp:server-cuda",
+    1,
+)
+path.write_text(text)
+print("ROLLBACK_OK: restored previous llama.cpp image reference")
+PY
+  exit 0
+fi
+
 for path in handler.py Dockerfile requirements.txt .dockerignore .env.example deploy.sh README.md changes.diff VERIFICATION.txt; do
   rm -f "$root/$path"
 done

@@ -1,4 +1,4 @@
-FROM ghcr.io/ggerganov/llama.cpp:server-cuda
+FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f
 
 USER root
 RUN apt-get update \

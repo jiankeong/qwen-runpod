@@ -4,6 +4,9 @@ This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
 `UD-Q4_K_M` GGUF on first boot, and exposes it through RunPod queue jobs. The
 handler preserves the OpenAI chat/completions response shape.
 
+The Docker build pins the verified multi-architecture CUDA 12 image from the
+current `ggml-org/llama.cpp` GitHub Container Registry namespace.
+
 ## RunPod Hub
 
 The repository includes `.runpod/hub.json` and `.runpod/tests.json`, so a GitHub
