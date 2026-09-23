@@ -1,6 +1,11 @@
 FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9
 
 USER root
+RUN test -f /app/libllama-server-impl.so \
+    && printf '/app\n' > /etc/ld.so.conf.d/llama-cpp.conf \
+    && ldconfig \
+    && /app/llama-server --version
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip ca-certificates \
     && rm -rf /var/lib/apt/lists/* \

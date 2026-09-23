@@ -1,62 +1,62 @@
-diff --git a/.runpod/tests.json b/.runpod/tests.json
-index 645f05a..9563fde 100644
---- a/.runpod/tests.json
-+++ b/.runpod/tests.json
-@@ -9,7 +9,7 @@
-     }
-   ],
-   "config": {
--    "gpuTypeId": "NVIDIA GeForce RTX 4090",
-+    "gpuTypeId": "NVIDIA A40",
-     "gpuCount": 1,
-     "allowedCudaVersions": [
-       "12.8",
+diff --git a/Dockerfile b/Dockerfile
+index 7aa3f80..087f639 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,6 +1,11 @@
+ FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9
+ 
+ USER root
++RUN test -f /app/libllama-server-impl.so \
++    && printf '/app\n' > /etc/ld.so.conf.d/llama-cpp.conf \
++    && ldconfig \
++    && /app/llama-server --version
++
+ RUN apt-get update \
+     && apt-get install -y --no-install-recommends python3 python3-pip ca-certificates \
+     && rm -rf /var/lib/apt/lists/* \
 diff --git a/README.md b/README.md
-index 4695a63..2c80d76 100644
+index 2c80d76..b3c6591 100644
 --- a/README.md
 +++ b/README.md
-@@ -18,6 +18,7 @@ and a non-streaming chat-completion smoke test on the datacenter-oriented 48 GB
- NVIDIA GPU pool. Following the working `qwen-image-2-1` Hub pattern, validation
- sets `USE_MOCK_PIPELINE=1` and checks only that the RunPod handler boots and
- returns a response within 30 seconds. It does not download model weights.
-+The Hub smoke test targets an A40 to avoid the 4090 pool's reservation failures.
- Normal deployments keep `USE_MOCK_PIPELINE=0` and use Q4_K_M with 16K context.
+@@ -7,7 +7,9 @@ handler preserves the OpenAI chat/completions response shape.
+ The Docker build pins the verified multi-architecture CUDA 12 image from the
+ current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
+ `full-cuda` runtime so `llama-server` and its split implementation library ship
+-together.
++together. The build registers `/app` with the dynamic linker and executes
++`llama-server --version`, so a missing `libllama-server-impl.so` fails during
++the image build rather than leaving a queued job waiting for startup.
  
- ## 1. Build and push
+ ## RunPod Hub
+ 
 diff --git a/ROLLBACK.sh b/ROLLBACK.sh
-index 6217c64..aea0ca5 100755
+index aea0ca5..faa967c 100755
 --- a/ROLLBACK.sh
 +++ b/ROLLBACK.sh
-@@ -2,6 +2,19 @@
+@@ -2,6 +2,12 @@
  set -euo pipefail
  
  root="${1:-$(pwd)}"
-+if [[ "${2:-}" == "--test-pool-only" ]]; then
-+  python3 - "$root/.runpod/tests.json" <<'PY'
-+from pathlib import Path
-+import sys
-+
-+path = Path(sys.argv[1])
-+text = path.read_text().replace('"gpuTypeId": "NVIDIA A40"', '"gpuTypeId": "NVIDIA GeForce RTX 4090"', 1)
-+path.write_text(text)
-+print("ROLLBACK_OK: restored RTX 4090 Hub test pool")
-+PY
++if [[ "${2:-}" == "--loader-path-only" ]]; then
++  git -C "$root" show v1.0.7:Dockerfile > "$root/Dockerfile"
++  printf 'ROLLBACK_OK: restored v1.0.7 Dockerfile without linker registration\n'
 +  exit 0
 +fi
 +
- if [[ "${2:-}" == "--mock-smoke-only" ]]; then
-   for path in handler.py .runpod/tests.json .runpod/hub.json; do
-     git -C "$root" show "v1.0.5:$path" > "$root/$path"
+ if [[ "${2:-}" == "--test-pool-only" ]]; then
+   python3 - "$root/.runpod/tests.json" <<'PY'
+ from pathlib import Path
 diff --git a/tests/test_runpod_hub.py b/tests/test_runpod_hub.py
-index 44b107b..2a43e0c 100644
+index 2a43e0c..6b59713 100644
 --- a/tests/test_runpod_hub.py
 +++ b/tests/test_runpod_hub.py
-@@ -28,7 +28,7 @@ class RunpodHubConfigTests(unittest.TestCase):
-         smoke_test = config["tests"][0]
-         self.assertEqual(smoke_test["input"], {"healthcheck": True})
-         self.assertEqual(smoke_test["timeout"], 30_000)
--        self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA GeForce RTX 4090")
-+        self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA A40")
-         self.assertEqual(config["config"]["gpuCount"], 1)
-         env = {item["key"]: item["value"] for item in config["config"]["env"]}
-         self.assertEqual(env["USE_MOCK_PIPELINE"], "1")
+@@ -14,6 +14,9 @@ class RunpodHubConfigTests(unittest.TestCase):
+         self.assertTrue(first_line.startswith("FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:"))
+         self.assertRegex(first_line, re.compile(r"@sha256:[0-9a-f]{64}$"))
+         self.assertNotIn("ghcr.io/ggerganov/", dockerfile)
++        self.assertIn("test -f /app/libllama-server-impl.so", dockerfile)
++        self.assertIn("/etc/ld.so.conf.d/llama-cpp.conf", dockerfile)
++        self.assertIn("/app/llama-server --version", dockerfile)
+ 
+     def test_hub_configuration(self):
+         config = json.loads((ROOT / ".runpod" / "hub.json").read_text())

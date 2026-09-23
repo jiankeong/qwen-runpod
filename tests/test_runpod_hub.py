@@ -14,6 +14,9 @@ class RunpodHubConfigTests(unittest.TestCase):
         self.assertTrue(first_line.startswith("FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:"))
         self.assertRegex(first_line, re.compile(r"@sha256:[0-9a-f]{64}$"))
         self.assertNotIn("ghcr.io/ggerganov/", dockerfile)
+        self.assertIn("test -f /app/libllama-server-impl.so", dockerfile)
+        self.assertIn("/etc/ld.so.conf.d/llama-cpp.conf", dockerfile)
+        self.assertIn("/app/llama-server --version", dockerfile)
 
     def test_hub_configuration(self):
         config = json.loads((ROOT / ".runpod" / "hub.json").read_text())

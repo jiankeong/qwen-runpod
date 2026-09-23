@@ -1,34 +1,34 @@
-RunPod v1.0.7 test-pool reservation workaround verification
+RunPod v1.0.8 llama-server dynamic-linker fix verification
 
 Changed branch/field
-- Branch: Hub test pod provisioning before container startup
-- Field: .runpod/tests.json config.gpuTypeId changed from NVIDIA GeForce RTX 4090 to NVIDIA A40; 30000 ms mock-handler validation remains unchanged
+- Branch: container image startup before llama-server model loading
+- Field: Dockerfile verifies /app/libllama-server-impl.so, registers /app in ld.so.conf.d, runs ldconfig, and probes llama-server --version during build
 
 Artifacts
-- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/.runpod/tests.json
+- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/Dockerfile
 - DIFF_FILE: /Users/jk/PhpstormProjects/qwen-runpod/changes.diff
 - VERIFICATION: /Users/jk/PhpstormProjects/qwen-runpod/VERIFICATION.txt
 - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
 
 Hashes
-- Original tests.json SHA-256: 7e92ba9c7b2fb0083056064c97d77ccb86376266a43717ba4df46485d8054043
-- Modified tests.json SHA-256: bceceaf7a2a55f6f7524db661de5be7d085e9666266aa677b6af3e34ccfcdd91
+- Original Dockerfile SHA-256: 92106cdba230e0087a0132e5709b80201c0a4f29bc8908a9a1cfeb5f29e1ba5a
+- Modified Dockerfile SHA-256: cbc2be3920fac35e43e2294fac6e0386810ccdc2bbcfe0bc9e96662042f82f84
 
 BASELINE
 Command: python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: v1.0.6 RTX 4090 mock-handler Hub test
-Literal output/result: Ran 11 tests in 0.004s; OK; EXIT_STATUS=0
+Input: v1.0.7 Dockerfile without dynamic-linker registration
+Literal output/result: Ran 11 tests in 0.006s; OK; EXIT_STATUS=0
 Exit status: 0
 
 MODIFIED
-Command: python3 -m json.tool .runpod/tests.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json; d=json.load(open(".runpod/tests.json")); print("MODIFIED_GPU="+d["config"]["gpuTypeId"]); print("MODIFIED_TIMEOUT_MS="+str(d["tests"][0]["timeout"])); print("MODIFIED_MOCK="+d["config"]["env"][0]["value"])'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: A40 mock-handler Hub test
-Literal output/result: Ran 11 tests in 0.005s; OK; MODIFIED_GPU=NVIDIA A40; MODIFIED_TIMEOUT_MS=30000; MODIFIED_MOCK=1; EXIT_STATUS=0
+Command: python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'from pathlib import Path; d=Path("Dockerfile").read_text(); print("MODIFIED_LIBRARY_CHECK="+str("test -f /app/libllama-server-impl.so" in d)); print("MODIFIED_LINKER_CONFIG="+str("/etc/ld.so.conf.d/llama-cpp.conf" in d)); print("MODIFIED_BINARY_PROBE="+str("/app/llama-server --version" in d))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+Input: Dockerfile with library presence check, linker cache registration, and binary startup probe
+Literal output/result: Ran 11 tests in 0.008s; OK; MODIFIED_LIBRARY_CHECK=True; MODIFIED_LINKER_CONFIG=True; MODIFIED_BINARY_PROBE=True; EXIT_STATUS=0
 Exit status: 0
 
 ROLLBACK
-Command: tmp=$(mktemp -d /tmp/qwen-runpod-v107-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --test-pool-only && python3 -c 'import json,sys; from pathlib import Path; d=json.loads((Path(sys.argv[1])/".runpod/tests.json").read_text()); print("ROLLBACK_GPU="+d["config"]["gpuTypeId"]); assert d["config"]["gpuTypeId"]=="NVIDIA GeForce RTX 4090"' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
-Input: separate copy of A40-configured workspace
-Literal output/result: ROLLBACK_OK: restored RTX 4090 Hub test pool; ROLLBACK_GPU=NVIDIA GeForce RTX 4090; ROLLBACK_COPY=/tmp/qwen-runpod-v107-rollback.1iYObL/project; EXIT_STATUS=0
+Command: tmp=$(mktemp -d /tmp/qwen-runpod-v108-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --loader-path-only && python3 -c 'import sys; from pathlib import Path; d=(Path(sys.argv[1])/"Dockerfile").read_text(); print("ROLLBACK_HAS_LINKER_CONFIG="+str("llama-cpp.conf" in d)); print("ROLLBACK_HAS_BINARY_PROBE="+str("llama-server --version" in d)); assert "llama-cpp.conf" not in d' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
+Input: separate copy of v1.0.8 workspace
+Literal output/result: ROLLBACK_OK: restored v1.0.7 Dockerfile without linker registration; ROLLBACK_HAS_LINKER_CONFIG=False; ROLLBACK_HAS_BINARY_PROBE=False; ROLLBACK_COPY=/tmp/qwen-runpod-v108-rollback.i6b3t8/project; EXIT_STATUS=0
 Exit status: 0
-Restored behavior/status: rollback copy again selects the failing RTX 4090 reservation pool; live MODIFIED_FILE targets A40 and keeps the fast mock check.
+Restored behavior/status: rollback copy again omits /app from the linker cache and does not probe the server; live MODIFIED_FILE fails the build unless the library exists and the binary starts.

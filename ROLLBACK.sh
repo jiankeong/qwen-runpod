@@ -2,6 +2,12 @@
 set -euo pipefail
 
 root="${1:-$(pwd)}"
+if [[ "${2:-}" == "--loader-path-only" ]]; then
+  git -C "$root" show v1.0.7:Dockerfile > "$root/Dockerfile"
+  printf 'ROLLBACK_OK: restored v1.0.7 Dockerfile without linker registration\n'
+  exit 0
+fi
+
 if [[ "${2:-}" == "--test-pool-only" ]]; then
   python3 - "$root/.runpod/tests.json" <<'PY'
 from pathlib import Path

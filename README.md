@@ -7,7 +7,9 @@ handler preserves the OpenAI chat/completions response shape.
 The Docker build pins the verified multi-architecture CUDA 12 image from the
 current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
 `full-cuda` runtime so `llama-server` and its split implementation library ship
-together.
+together. The build registers `/app` with the dynamic linker and executes
+`llama-server --version`, so a missing `libllama-server-impl.so` fails during
+the image build rather than leaving a queued job waiting for startup.
 
 ## RunPod Hub
 
