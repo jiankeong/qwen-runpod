@@ -41,6 +41,14 @@ class HandlerTests(unittest.TestCase):
         self.assertIn("Qwen3.8-27B-UD-Q4_K_M.gguf", command)
         self.assertIn("16384", command)
 
+    def test_server_command_prefers_baked_model(self):
+        model_path = "/models/Qwen3.8-27B-UD-Q4_K_M.gguf"
+        with patch.dict(os.environ, {"MODEL_PATH": model_path}, clear=True):
+            command = handler.build_server_command()
+        self.assertIn("--model", command)
+        self.assertIn(model_path, command)
+        self.assertNotIn("--hf-repo", command)
+
     def test_mock_pipeline_returns_without_waiting_for_model(self):
         with patch.dict(os.environ, {"USE_MOCK_PIPELINE": "1"}, clear=True):
             result = handler.handler({"input": {"healthcheck": True}})

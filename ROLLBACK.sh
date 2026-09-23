@@ -2,6 +2,14 @@
 set -euo pipefail
 
 root="${1:-$(pwd)}"
+if [[ "${2:-}" == "--baked-model-only" ]]; then
+  for path in Dockerfile handler.py .runpod/hub.json; do
+    git -C "$root" show "v1.0.8:$path" > "$root/$path"
+  done
+  printf 'ROLLBACK_OK: restored v1.0.8 runtime model download\n'
+  exit 0
+fi
+
 if [[ "${2:-}" == "--loader-path-only" ]]; then
   git -C "$root" show v1.0.7:Dockerfile > "$root/Dockerfile"
   printf 'ROLLBACK_OK: restored v1.0.7 Dockerfile without linker registration\n'

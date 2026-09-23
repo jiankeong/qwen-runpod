@@ -17,13 +17,15 @@ class RunpodHubConfigTests(unittest.TestCase):
         self.assertIn("test -f /app/libllama-server-impl.so", dockerfile)
         self.assertIn("/etc/ld.so.conf.d/llama-cpp.conf", dockerfile)
         self.assertIn("/app/llama-server --version", dockerfile)
+        self.assertIn("MODEL_PATH=\"/models/Qwen3.8-27B-UD-Q4_K_M.gguf\"", dockerfile)
+        self.assertIn("stat -c %s /models/Qwen3.8-27B-UD-Q4_K_M.gguf", dockerfile)
 
     def test_hub_configuration(self):
         config = json.loads((ROOT / ".runpod" / "hub.json").read_text())
         self.assertEqual(config["type"], "serverless")
         self.assertEqual(config["category"], "language")
         self.assertEqual(config["config"]["runsOn"], "GPU")
-        self.assertGreaterEqual(config["config"]["containerDiskInGb"], 30)
+        self.assertGreaterEqual(config["config"]["containerDiskInGb"], 40)
         self.assertIn("ADA_24", config["config"]["gpuIds"])
 
     def test_hub_smoke_test_matches_handler_input(self):

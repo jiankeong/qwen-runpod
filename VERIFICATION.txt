@@ -1,8 +1,8 @@
-RunPod v1.0.8 llama-server dynamic-linker fix verification
+RunPod v1.0.9 Serverless-only baked-model verification
 
 Changed branch/field
-- Branch: container image startup before llama-server model loading
-- Field: Dockerfile verifies /app/libllama-server-impl.so, registers /app in ld.so.conf.d, runs ldconfig, and probes llama-server --version during build
+- Branch: Serverless cold start before llama-server readiness
+- Fields: Dockerfile downloads Q4_K_M during image build; handler.py prefers MODEL_PATH; hub container disk increases from 30 GB to 40 GB
 
 Artifacts
 - MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/Dockerfile
@@ -11,24 +11,26 @@ Artifacts
 - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
 
 Hashes
-- Original Dockerfile SHA-256: 92106cdba230e0087a0132e5709b80201c0a4f29bc8908a9a1cfeb5f29e1ba5a
-- Modified Dockerfile SHA-256: cbc2be3920fac35e43e2294fac6e0386810ccdc2bbcfe0bc9e96662042f82f84
+- Original Dockerfile SHA-256: cbc2be3920fac35e43e2294fac6e0386810ccdc2bbcfe0bc9e96662042f82f84
+- Modified Dockerfile SHA-256: 334b7a88eefb3e2be30eebd617ced4b1335d0fcd24be0af590cec7f349f8a1d0
+- Original handler.py SHA-256: 523739c0adb1ac535962570b0bdb7319afdc34edb25ad928dc6899b3c3f691c7
+- Modified handler.py SHA-256: 7d46e9e1e6c931a3314638bb22759e64d8e5534a578dd11edd7fdfc843b9a01e
 
 BASELINE
 Command: python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: v1.0.7 Dockerfile without dynamic-linker registration
-Literal output/result: Ran 11 tests in 0.006s; OK; EXIT_STATUS=0
+Input: v1.0.8 runtime-download configuration
+Literal output/result: Ran 11 tests in 0.009s; OK; EXIT_STATUS=0
 Exit status: 0
 
 MODIFIED
-Command: python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'from pathlib import Path; d=Path("Dockerfile").read_text(); print("MODIFIED_LIBRARY_CHECK="+str("test -f /app/libllama-server-impl.so" in d)); print("MODIFIED_LINKER_CONFIG="+str("/etc/ld.so.conf.d/llama-cpp.conf" in d)); print("MODIFIED_BINARY_PROBE="+str("/app/llama-server --version" in d))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: Dockerfile with library presence check, linker cache registration, and binary startup probe
-Literal output/result: Ran 11 tests in 0.008s; OK; MODIFIED_LIBRARY_CHECK=True; MODIFIED_LINKER_CONFIG=True; MODIFIED_BINARY_PROBE=True; EXIT_STATUS=0
+Command: python3 -m json.tool .runpod/hub.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import os,handler; os.environ["MODEL_PATH"]="/models/Qwen3.8-27B-UD-Q4_K_M.gguf"; c=handler.build_server_command(); print("MODIFIED_MODEL_ARGS="+" ".join(c[c.index("--model"):c.index("--model")+2])); print("MODIFIED_USES_HF="+str("--hf-repo" in c))'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+Input: baked Q4_K_M model path and 40 GB container disk
+Literal output/result: Ran 12 tests in 0.004s; OK; MODIFIED_MODEL_ARGS=--model /models/Qwen3.8-27B-UD-Q4_K_M.gguf; MODIFIED_USES_HF=False; EXIT_STATUS=0
 Exit status: 0
 
 ROLLBACK
-Command: tmp=$(mktemp -d /tmp/qwen-runpod-v108-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --loader-path-only && python3 -c 'import sys; from pathlib import Path; d=(Path(sys.argv[1])/"Dockerfile").read_text(); print("ROLLBACK_HAS_LINKER_CONFIG="+str("llama-cpp.conf" in d)); print("ROLLBACK_HAS_BINARY_PROBE="+str("llama-server --version" in d)); assert "llama-cpp.conf" not in d' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
-Input: separate copy of v1.0.8 workspace
-Literal output/result: ROLLBACK_OK: restored v1.0.7 Dockerfile without linker registration; ROLLBACK_HAS_LINKER_CONFIG=False; ROLLBACK_HAS_BINARY_PROBE=False; ROLLBACK_COPY=/tmp/qwen-runpod-v108-rollback.i6b3t8/project; EXIT_STATUS=0
+Command: tmp=$(mktemp -d /tmp/qwen-runpod-v109-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --baked-model-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); d=(root/"Dockerfile").read_text(); h=(root/"handler.py").read_text(); hub=json.loads((root/".runpod/hub.json").read_text()); print("ROLLBACK_BAKED_MODEL="+str("MODEL_URL" in d)); print("ROLLBACK_MODEL_PATH="+str("MODEL_PATH" in h)); print("ROLLBACK_DISK_GB="+str(hub["config"]["containerDiskInGb"])); assert "MODEL_URL" not in d and hub["config"]["containerDiskInGb"]==30' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
+Input: separate copy of v1.0.9 workspace
+Literal output/result: ROLLBACK_OK: restored v1.0.8 runtime model download; ROLLBACK_BAKED_MODEL=False; ROLLBACK_MODEL_PATH=False; ROLLBACK_DISK_GB=30; ROLLBACK_COPY=/tmp/qwen-runpod-v109-rollback.wdmlLU/project; EXIT_STATUS=0
 Exit status: 0
-Restored behavior/status: rollback copy again omits /app from the linker cache and does not probe the server; live MODIFIED_FILE fails the build unless the library exists and the binary starts.
+Restored behavior/status: rollback copy again downloads from Hugging Face at runtime; live MODIFIED_FILE loads the baked model directly and needs no Pod or Network Volume.

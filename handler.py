@@ -29,8 +29,16 @@ def build_server_command() -> list[str]:
         os.getenv("LLAMA_SERVER_BIN", "/app/llama-server"),
         "--host", LLAMA_HOST,
         "--port", str(LLAMA_PORT),
-        "--hf-repo", model.split(":", 1)[0],
-        "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
+    ]
+    model_path = os.getenv("MODEL_PATH")
+    if model_path:
+        command.extend(["--model", model_path])
+    else:
+        command.extend([
+            "--hf-repo", model.split(":", 1)[0],
+            "--hf-file", os.getenv("MODEL_FILE", "Qwen3.8-27B-UD-Q4_K_M.gguf"),
+        ])
+    command.extend([
         "--n-gpu-layers", os.getenv("GPU_LAYERS", "999"),
         "--ctx-size", os.getenv("CONTEXT_SIZE", "16384"),
         "--parallel", os.getenv("PARALLEL", "1"),
@@ -38,7 +46,7 @@ def build_server_command() -> list[str]:
         "--cache-type-v", os.getenv("CACHE_TYPE_V", "q8_0"),
         "--flash-attn", "on",
         "--jinja",
-    ]
+    ])
     if os.getenv("HF_TOKEN"):
         command.extend(["--hf-token", os.environ["HF_TOKEN"]])
     return command

@@ -7,7 +7,9 @@ handler preserves the OpenAI chat/completions response shape.
 The Docker build pins the verified multi-architecture CUDA 12 image from the
 current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
 `full-cuda` runtime so `llama-server` and its split implementation library ship
-together. The build registers `/app` with the dynamic linker and executes
+together. The 16.5 GB Q4_K_M file is baked into the image, so Serverless workers
+do not require a separate Pod or a first-request model download. The build
+registers `/app` with the dynamic linker and executes
 `llama-server --version`, so a missing `libllama-server-impl.so` fails during
 the image build rather than leaving a queued job waiting for startup.
 
@@ -21,7 +23,8 @@ NVIDIA GPU pool. Following the working `qwen-image-2-1` Hub pattern, validation
 sets `USE_MOCK_PIPELINE=1` and checks only that the RunPod handler boots and
 returns a response within 30 seconds. It does not download model weights.
 The Hub smoke test targets an A40 to avoid the 4090 pool's reservation failures.
-Normal deployments keep `USE_MOCK_PIPELINE=0` and use Q4_K_M with 16K context.
+Normal deployments keep `USE_MOCK_PIPELINE=0` and load the baked Q4_K_M file
+with 16K context.
 
 ## 1. Build and push
 
