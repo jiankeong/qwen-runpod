@@ -20,7 +20,8 @@ and a non-streaming chat-completion smoke test on the datacenter-oriented 48 GB
 NVIDIA GPU pool. Following the working `qwen-image-2-1` Hub pattern, validation
 sets `USE_MOCK_PIPELINE=1` and checks only that the RunPod handler boots and
 returns a response within 30 seconds. It does not download model weights.
-The Hub smoke test targets an A40 to avoid the 4090 pool's reservation failures.
+The Hub smoke test targets an RTX 4090, matching the working
+`qwen-image-2-1` configuration and avoiding the unavailable A40/A6000/L40 pool.
 Normal deployments keep `USE_MOCK_PIPELINE=0`, download Q4_K_M into the mounted
 Network Volume on first use, and reuse it on later workers with 16K context.
 

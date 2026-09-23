@@ -34,7 +34,7 @@ class RunpodHubConfigTests(unittest.TestCase):
         smoke_test = config["tests"][0]
         self.assertEqual(smoke_test["input"], {"healthcheck": True})
         self.assertEqual(smoke_test["timeout"], 30_000)
-        self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA A40")
+        self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA GeForce RTX 4090")
         self.assertEqual(config["config"]["gpuCount"], 1)
         env = {item["key"]: item["value"] for item in config["config"]["env"]}
         self.assertEqual(env["USE_MOCK_PIPELINE"], "1")
