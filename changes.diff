@@ -1,57 +1,123 @@
-diff --git a/Dockerfile b/Dockerfile
-index 7b66e8a..7aa3f80 100644
---- a/Dockerfile
-+++ b/Dockerfile
-@@ -1,4 +1,4 @@
--FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f
-+FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9
- 
- USER root
- RUN apt-get update \
+diff --git a/.runpod/tests.json b/.runpod/tests.json
+index 24c7efb..8180160 100644
+--- a/.runpod/tests.json
++++ b/.runpod/tests.json
+@@ -22,7 +22,7 @@
+     "env": [
+       {
+         "key": "CONTEXT_SIZE",
+-        "value": "16384"
++        "value": "4096"
+       },
+       {
+         "key": "PARALLEL",
+@@ -30,7 +30,15 @@
+       },
+       {
+         "key": "STARTUP_TIMEOUT",
+-        "value": "1800"
++        "value": "1500"
++      },
++      {
++        "key": "MODEL",
++        "value": "unsloth/Qwen3.8-27B-GGUF:UD-Q2_K_XL"
++      },
++      {
++        "key": "MODEL_FILE",
++        "value": "Qwen3.8-27B-UD-Q2_K_XL.gguf"
+       }
+     ]
+   }
 diff --git a/README.md b/README.md
-index f0b8112..89d970f 100644
+index 89d970f..97b5d6d 100644
 --- a/README.md
 +++ b/README.md
-@@ -5,7 +5,9 @@ This worker launches current CUDA `llama.cpp`, downloads Unsloth's 16.5 GB
- handler preserves the OpenAI chat/completions response shape.
+@@ -15,7 +15,10 @@ The repository includes `.runpod/hub.json` and `.runpod/tests.json`, so a GitHub
+ release can be indexed and tested by RunPod Hub. The Hub listing uses the
+ **Language** category, one GPU with at least 24 GB VRAM, a 30 GB container disk,
+ and a non-streaming chat-completion smoke test on the datacenter-oriented 48 GB
+-NVIDIA A40 pool.
++NVIDIA A40 pool. The worker registers with RunPod immediately while llama.cpp
++downloads the model; the first job waits for readiness. Hub validation uses the
++smaller Q2 quant and 4K context to keep a cold-cache test inside its deadline,
++while normal deployments continue to default to Q4_K_M and 16K.
  
- The Docker build pins the verified multi-architecture CUDA 12 image from the
--current `ggml-org/llama.cpp` GitHub Container Registry namespace.
-+current `ggml-org/llama.cpp` GitHub Container Registry namespace. It uses the
-+`full-cuda` runtime so `llama-server` and its split implementation library ship
-+together.
- 
- ## RunPod Hub
+ ## 1. Build and push
  
 diff --git a/ROLLBACK.sh b/ROLLBACK.sh
-index 5f1bfca..beffd7f 100755
+index beffd7f..5094c13 100755
 --- a/ROLLBACK.sh
 +++ b/ROLLBACK.sh
-@@ -23,12 +23,12 @@ import sys
- path = Path(sys.argv[1])
- text = path.read_text()
- text = text.replace(
-+    "ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9",
-     "ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f",
--    "ghcr.io/ggerganov/llama.cpp:server-cuda",
-     1,
- )
- path.write_text(text)
--print("ROLLBACK_OK: restored previous llama.cpp image reference")
-+print("ROLLBACK_OK: restored previous server-cuda image reference")
- PY
-   exit 0
- fi
+@@ -2,6 +2,13 @@
+ set -euo pipefail
+ 
+ root="${1:-$(pwd)}"
++if [[ "${2:-}" == "--startup-flow-only" ]]; then
++  git -C "$root" show v1.0.4:handler.py > "$root/handler.py"
++  git -C "$root" show v1.0.4:.runpod/tests.json > "$root/.runpod/tests.json"
++  printf 'ROLLBACK_OK: restored v1.0.4 startup flow and Hub smoke-test model\n'
++  exit 0
++fi
++
+ if [[ "${2:-}" == "--test-gpu-only" ]]; then
+   python3 - "$root/.runpod/tests.json" <<'PY'
+ from pathlib import Path
+diff --git a/handler.py b/handler.py
+index 2a00be9..9379521 100644
+--- a/handler.py
++++ b/handler.py
+@@ -84,6 +84,9 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
+     if payload.get("stream"):
+         raise ValueError("stream=true is unsupported by RunPod queue jobs; use stream=false")
+ 
++    # Register the RunPod worker before the large GGUF finishes downloading.
++    # The first accepted job waits here while llama.cpp becomes ready.
++    wait_until_ready(int(os.getenv("STARTUP_TIMEOUT", "1800")))
+     payload.setdefault("model", os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"))
+     return forward(route, payload)
+ 
+@@ -94,7 +97,6 @@ def main() -> None:
+     os.environ["HF_HOME"] = cache_dir
+     server = subprocess.Popen(build_server_command())
+     try:
+-        wait_until_ready(int(os.getenv("STARTUP_TIMEOUT", "1800")))
+         import runpod
+ 
+         runpod.serverless.start({"handler": handler})
+diff --git a/tests/test_handler.py b/tests/test_handler.py
+index d610065..30cb532 100644
+--- a/tests/test_handler.py
++++ b/tests/test_handler.py
+@@ -7,6 +7,10 @@ import handler
+ 
+ 
+ class HandlerTests(unittest.TestCase):
++    def setUp(self):
++        self.ready = patch("handler.wait_until_ready").start()
++        self.addCleanup(patch.stopall)
++
+     @patch("handler.forward")
+     def test_chat_route_and_defaults(self, forward):
+         forward.return_value = {"choices": [{"message": {"content": "ok"}}]}
+@@ -15,6 +19,7 @@ class HandlerTests(unittest.TestCase):
+         self.assertEqual(route, "/v1/chat/completions")
+         self.assertIn("model", payload)
+         self.assertEqual(result["choices"][0]["message"]["content"], "ok")
++        self.ready.assert_called_once_with(1800)
+ 
+     @patch("handler.forward")
+     def test_completion_route(self, forward):
 diff --git a/tests/test_runpod_hub.py b/tests/test_runpod_hub.py
-index e4e3b4a..714621a 100644
+index 714621a..29bd7d4 100644
 --- a/tests/test_runpod_hub.py
 +++ b/tests/test_runpod_hub.py
-@@ -11,7 +11,7 @@ class RunpodHubConfigTests(unittest.TestCase):
-     def test_dockerfile_uses_resolvable_official_llama_image(self):
-         dockerfile = (ROOT / "Dockerfile").read_text()
-         first_line = dockerfile.splitlines()[0]
--        self.assertTrue(first_line.startswith("FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:"))
-+        self.assertTrue(first_line.startswith("FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:"))
-         self.assertRegex(first_line, re.compile(r"@sha256:[0-9a-f]{64}$"))
-         self.assertNotIn("ghcr.io/ggerganov/", dockerfile)
+@@ -31,6 +31,9 @@ class RunpodHubConfigTests(unittest.TestCase):
+         self.assertGreaterEqual(smoke_test["timeout"], 1_800_000)
+         self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA A40")
+         self.assertEqual(config["config"]["gpuCount"], 1)
++        env = {item["key"]: item["value"] for item in config["config"]["env"]}
++        self.assertEqual(env["CONTEXT_SIZE"], "4096")
++        self.assertEqual(env["MODEL_FILE"], "Qwen3.8-27B-UD-Q2_K_XL.gguf")
  
+ 
+ if __name__ == "__main__":

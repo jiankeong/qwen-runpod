@@ -84,6 +84,9 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
     if payload.get("stream"):
         raise ValueError("stream=true is unsupported by RunPod queue jobs; use stream=false")
 
+    # Register the RunPod worker before the large GGUF finishes downloading.
+    # The first accepted job waits here while llama.cpp becomes ready.
+    wait_until_ready(int(os.getenv("STARTUP_TIMEOUT", "1800")))
     payload.setdefault("model", os.getenv("MODEL", "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M"))
     return forward(route, payload)
 
@@ -94,7 +97,6 @@ def main() -> None:
     os.environ["HF_HOME"] = cache_dir
     server = subprocess.Popen(build_server_command())
     try:
-        wait_until_ready(int(os.getenv("STARTUP_TIMEOUT", "1800")))
         import runpod
 
         runpod.serverless.start({"handler": handler})

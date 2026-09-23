@@ -2,6 +2,13 @@
 set -euo pipefail
 
 root="${1:-$(pwd)}"
+if [[ "${2:-}" == "--startup-flow-only" ]]; then
+  git -C "$root" show v1.0.4:handler.py > "$root/handler.py"
+  git -C "$root" show v1.0.4:.runpod/tests.json > "$root/.runpod/tests.json"
+  printf 'ROLLBACK_OK: restored v1.0.4 startup flow and Hub smoke-test model\n'
+  exit 0
+fi
+
 if [[ "${2:-}" == "--test-gpu-only" ]]; then
   python3 - "$root/.runpod/tests.json" <<'PY'
 from pathlib import Path

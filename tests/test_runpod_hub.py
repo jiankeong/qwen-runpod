@@ -31,6 +31,9 @@ class RunpodHubConfigTests(unittest.TestCase):
         self.assertGreaterEqual(smoke_test["timeout"], 1_800_000)
         self.assertEqual(config["config"]["gpuTypeId"], "NVIDIA A40")
         self.assertEqual(config["config"]["gpuCount"], 1)
+        env = {item["key"]: item["value"] for item in config["config"]["env"]}
+        self.assertEqual(env["CONTEXT_SIZE"], "4096")
+        self.assertEqual(env["MODEL_FILE"], "Qwen3.8-27B-UD-Q2_K_XL.gguf")
 
 
 if __name__ == "__main__":

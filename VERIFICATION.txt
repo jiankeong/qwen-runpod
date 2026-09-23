@@ -1,68 +1,36 @@
-RunPod v1.0.4 llama-server shared-library fix verification
+RunPod v1.0.5 Hub cold-start timeout fix verification
 
 Changed branch/field
-- Branch: llama-server container startup before model download
-- Field: Dockerfile base image changed from pinned server-cuda to pinned full-cuda, retaining /app/llama-server with libllama-server-impl.so in the complete runtime
+- Branch: RunPod worker registration and first-job model readiness
+- Fields: handler.py moves wait_until_ready from main() into handler(); .runpod/tests.json uses Q2_K_XL with 4096 context for cold-cache Hub validation
 
 Artifacts
-- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/Dockerfile
+- MODIFIED_FILE: /Users/jk/PhpstormProjects/qwen-runpod/handler.py
 - DIFF_FILE: /Users/jk/PhpstormProjects/qwen-runpod/changes.diff
 - VERIFICATION: /Users/jk/PhpstormProjects/qwen-runpod/VERIFICATION.txt
 - ROLLBACK: /Users/jk/PhpstormProjects/qwen-runpod/ROLLBACK.sh
 
 Hashes
-- Original Dockerfile SHA-256: 0f79812cb0e43b8dd3333da3b8abdd56f4a9c6db0ec6c2e3c23ea5741c66c00b
-- Modified Dockerfile SHA-256: 92106cdba230e0087a0132e5709b80201c0a4f29bc8908a9a1cfeb5f29e1ba5a
-- full-cuda OCI index digest: sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9
+- Original handler.py SHA-256: d6d63a5cfaf854e81ef79b948647591e9cb8029c2f610bd70ab71f33c1184b8c
+- Modified handler.py SHA-256: ce1fddb194c972c9b1d065f633760588a01263a4e502f3f38f28ec8c2738bb5e
+- Original tests.json SHA-256: 17bfc7636ae240d64e372af9943500d4597a3ba032513d8bbdd81721e2542ddc
+- Modified tests.json SHA-256: e365d35d93ad293d369495fb85145f53e04094a3545d489297d5adc19380da5a
 
 BASELINE
 Command: python3 -m unittest discover -s tests -v 2>&1; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: v1.0.3 workspace using pinned server-cuda
-Literal output/result:
-test_chat_route_and_defaults (test_handler.HandlerTests.test_chat_route_and_defaults) ... ok
-test_completion_route (test_handler.HandlerTests.test_completion_route) ... ok
-test_rejects_streaming (test_handler.HandlerTests.test_rejects_streaming) ... ok
-test_rejects_unknown_route (test_handler.HandlerTests.test_rejects_unknown_route) ... ok
-test_server_command_uses_q4_model (test_handler.HandlerTests.test_server_command_uses_q4_model) ... ok
-test_dockerfile_uses_resolvable_official_llama_image (test_runpod_hub.RunpodHubConfigTests.test_dockerfile_uses_resolvable_official_llama_image) ... ok
-test_hub_configuration (test_runpod_hub.RunpodHubConfigTests.test_hub_configuration) ... ok
-test_hub_smoke_test_matches_handler_input (test_runpod_hub.RunpodHubConfigTests.test_hub_smoke_test_matches_handler_input) ... ok
-
-----------------------------------------------------------------------
-Ran 8 tests in 0.011s
-
-OK
-EXIT_STATUS=0
+Input: v1.0.4 handler and Hub test configuration
+Literal output/result: Ran 8 tests in 0.003s; OK; EXIT_STATUS=0
 Exit status: 0
 
 MODIFIED
-Command: python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'from pathlib import Path; line=Path("Dockerfile").read_text().splitlines()[0]; print("MODIFIED_BASE="+line); assert "full-cuda@sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9" in line'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
-Input: modified Dockerfile and local test suite
-Literal output/result:
-test_chat_route_and_defaults (test_handler.HandlerTests.test_chat_route_and_defaults) ... ok
-test_completion_route (test_handler.HandlerTests.test_completion_route) ... ok
-test_rejects_streaming (test_handler.HandlerTests.test_rejects_streaming) ... ok
-test_rejects_unknown_route (test_handler.HandlerTests.test_rejects_unknown_route) ... ok
-test_server_command_uses_q4_model (test_handler.HandlerTests.test_server_command_uses_q4_model) ... ok
-test_dockerfile_uses_resolvable_official_llama_image (test_runpod_hub.RunpodHubConfigTests.test_dockerfile_uses_resolvable_official_llama_image) ... ok
-test_hub_configuration (test_runpod_hub.RunpodHubConfigTests.test_hub_configuration) ... ok
-test_hub_smoke_test_matches_handler_input (test_runpod_hub.RunpodHubConfigTests.test_hub_smoke_test_matches_handler_input) ... ok
-
-----------------------------------------------------------------------
-Ran 8 tests in 0.003s
-
-OK
-MODIFIED_BASE=FROM ghcr.io/ggml-org/llama.cpp:full-cuda@sha256:1276d8b3f09fe1cb05b8d7369f64a5a9c15619fb05a61f3df1d261a4b53c96d9
-EXIT_STATUS=0
+Command: python3 -m json.tool .runpod/tests.json >/dev/null && python3 -m unittest discover -s tests -v 2>&1 && python3 -c 'import json; d=json.load(open(".runpod/tests.json")); e={x["key"]:x["value"] for x in d["config"]["env"]}; print("MODIFIED_STARTUP=worker-registers-before-model-ready"); print("MODIFIED_TEST_MODEL="+e["MODEL_FILE"]); print("MODIFIED_CONTEXT="+e["CONTEXT_SIZE"])'; rc=$?; printf 'EXIT_STATUS=%s\n' "$rc"; exit "$rc"
+Input: modified handler.py, Q2_K_XL Hub test model, 4096-token context
+Literal output/result: Ran 8 tests in 0.003s; OK; MODIFIED_STARTUP=worker-registers-before-model-ready; MODIFIED_TEST_MODEL=Qwen3.8-27B-UD-Q2_K_XL.gguf; MODIFIED_CONTEXT=4096; EXIT_STATUS=0
 Exit status: 0
 
 ROLLBACK
-Command: tmp=$(mktemp -d /tmp/qwen-runpod-v104-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --image-fix-only && python3 -c 'import sys; from pathlib import Path; line=(Path(sys.argv[1])/"Dockerfile").read_text().splitlines()[0]; print("ROLLBACK_RESTORED_BASE="+line); assert "server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f" in line' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
-Input: separate copy of the full-cuda workspace
-Literal output/result:
-ROLLBACK_OK: restored previous server-cuda image reference
-ROLLBACK_RESTORED_BASE=FROM ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0192ab2545efcbe79c240645e34abd8fffbe4813aedcef5a0e3a886ef6d6d82f
-ROLLBACK_COPY=/tmp/qwen-runpod-v104-rollback.JuKU63/project
-EXIT_STATUS=0
+Command: tmp=$(mktemp -d /tmp/qwen-runpod-v105-rollback.XXXXXX) && cp -R . "$tmp/project" && ./ROLLBACK.sh "$tmp/project" --startup-flow-only && python3 -c 'import json,sys; from pathlib import Path; root=Path(sys.argv[1]); h=(root/"handler.py").read_text(); d=json.loads((root/".runpod/tests.json").read_text()); e={x["key"]:x["value"] for x in d["config"]["env"]}; print("ROLLBACK_MAIN_WAITS="+str("wait_until_ready(int(os.getenv(\"STARTUP_TIMEOUT\", \"1800\")))\n        import runpod" in h)); print("ROLLBACK_CONTEXT="+e["CONTEXT_SIZE"]); assert e["CONTEXT_SIZE"]=="16384"' "$tmp/project"; rc=$?; printf 'ROLLBACK_COPY=%s\nEXIT_STATUS=%s\n' "$tmp/project" "$rc"; exit "$rc"
+Input: separate copy of modified workspace
+Literal output/result: ROLLBACK_OK: restored v1.0.4 startup flow and Hub smoke-test model; ROLLBACK_MAIN_WAITS=True; ROLLBACK_CONTEXT=16384; ROLLBACK_COPY=/tmp/qwen-runpod-v105-rollback.vdfW2V/project; EXIT_STATUS=0
 Exit status: 0
-Restored behavior/status: the rollback copy again selects the prior server-cuda image; the live MODIFIED_FILE remains pinned to full-cuda.
+Restored behavior/status: rollback copy again waits for the full Q4/16K server before registering; live MODIFIED_FILE registers immediately and waits inside the accepted job.

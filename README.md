@@ -15,7 +15,10 @@ The repository includes `.runpod/hub.json` and `.runpod/tests.json`, so a GitHub
 release can be indexed and tested by RunPod Hub. The Hub listing uses the
 **Language** category, one GPU with at least 24 GB VRAM, a 30 GB container disk,
 and a non-streaming chat-completion smoke test on the datacenter-oriented 48 GB
-NVIDIA A40 pool.
+NVIDIA A40 pool. The worker registers with RunPod immediately while llama.cpp
+downloads the model; the first job waits for readiness. Hub validation uses the
+smaller Q2 quant and 4K context to keep a cold-cache test inside its deadline,
+while normal deployments continue to default to Q4_K_M and 16K.
 
 ## 1. Build and push
 

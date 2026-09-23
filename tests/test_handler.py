@@ -7,6 +7,10 @@ import handler
 
 
 class HandlerTests(unittest.TestCase):
+    def setUp(self):
+        self.ready = patch("handler.wait_until_ready").start()
+        self.addCleanup(patch.stopall)
+
     @patch("handler.forward")
     def test_chat_route_and_defaults(self, forward):
         forward.return_value = {"choices": [{"message": {"content": "ok"}}]}
@@ -15,6 +19,7 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(route, "/v1/chat/completions")
         self.assertIn("model", payload)
         self.assertEqual(result["choices"][0]["message"]["content"], "ok")
+        self.ready.assert_called_once_with(1800)
 
     @patch("handler.forward")
     def test_completion_route(self, forward):
